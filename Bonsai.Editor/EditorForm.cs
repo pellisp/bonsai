@@ -26,6 +26,11 @@ using Bonsai.Editor.GraphModel;
 using System.Threading.Tasks;
 using System.Threading;
 using System.Net;
+using System.Xml.Linq;
+using System.Reflection;
+
+//using Bonsai;
+
 
 namespace Bonsai.Editor
 {
@@ -3210,5 +3215,265 @@ namespace Bonsai.Editor
         }
 
         #endregion
+
+        private void exportMermaidToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var model = selectionModel.SelectedView;
+            if (model?.Workflow.Count > 0)
+            {
+                exportMermaidDialog.FileName = Path.GetFileNameWithoutExtension(FileName) + ".mmd";
+                if (exportMermaidDialog.ShowDialog() == DialogResult.OK)
+                {
+                    ExportMermaid(exportMermaidDialog.FileName, FileName);
+                }
+            }
+        }
+
+        class MermaidConverter
+        {
+            private static Type GetNodeType(XElement element, XDocument doc, XNamespace ns, XNamespace xsi)
+            {
+                XElement combinator = element.Element(ns + "Combinator");
+                string typeName = combinator?.Attribute(xsi + "type")?.Value;
+
+                if (typeName == null)
+                {
+                    typeName = element.Attribute(xsi + "type")?.Value;
+                }
+
+                if (typeName == null)
+                {
+                    Console.WriteLine($"{element}: Unknown type");
+                    return null;
+                }
+
+                string typeNamespaceAlias = null;
+                string className = null;
+
+                string[] parts = typeName.Split(':');
+
+                if (parts.Length == 2)
+                {
+                    typeNamespaceAlias = parts[0];
+                    className = parts[1];
+                }
+                else if (parts.Length == 1)
+                {
+                    className = parts[0];
+                }
+                else
+                {
+                    Console.WriteLine($"{element} invalid type name");
+                    return null;
+                }
+
+
+                string clrNs = null;
+                string assemblyName = null;
+
+                if (typeNamespaceAlias != null)
+                {
+                    Dictionary<string, string> xmlns = doc.Root.Attributes()
+                        .Where((XAttribute a) => a.IsNamespaceDeclaration && a.Name.Namespace == XNamespace.Xmlns)
+                        .ToDictionary(
+                            (XAttribute a) => a.Name.LocalName,
+                            (XAttribute a) => a.Value
+                        );
+
+                    if (!xmlns.TryGetValue(typeNamespaceAlias, out string clrNamespace))
+                    {
+                        Console.WriteLine($"{element} wrong typenamespacealias");
+                        return null;
+                    }
+
+                    string[] clrParts = clrNamespace.Replace("clr-namespace:", "").Split(';');
+                    if (clrParts.Length != 2)
+                    {
+                        Console.WriteLine($"{element} invalid clr namespace format ");
+                        return null;
+                    }
+
+                    clrNs = clrParts[0];
+                    assemblyName = clrParts[1].Replace("assembly=", "");
+                }
+                else
+                {
+                    clrNs = "Bonsai.Expressions";
+                    assemblyName = "Bonsai.Core";
+                }
+
+
+                Assembly asm;
+                try
+                {
+                    asm = Assembly.Load(assemblyName);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"{element}: Could not load assembly '{assemblyName}': {ex.Message}");
+                    return null;
+                }
+
+                Type type = asm.GetType($"{clrNs}.{className}");
+                if (type == null)
+                {
+                    className += "Builder";
+
+                    type = asm.GetType($"{clrNs}.{className}");
+                    if (type == null)
+                    {
+                        Console.WriteLine($"{element}: Could not find type '{clrNs}.{className}' in assembly '{assemblyName}'");
+                    }
+                }
+
+                return type;
+
+
+            }
+
+            private static string GetCategory(Type type)
+            {
+                while (type != null)
+                {
+                    WorkflowElementCategoryAttribute attr = type.GetCustomAttribute<WorkflowElementCategoryAttribute>();
+                    if (attr != null) return attr.Category.ToString();
+
+                    if (type.GetCustomAttribute<CombinatorAttribute>() != null)
+                    {
+                        return "Combinator";
+                    }
+
+
+                    type = type.BaseType;
+                }
+
+                return "Other";
+            }
+
+            private static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
+            {
+                string xsiType = "";
+
+                if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
+                if (string.IsNullOrEmpty(xsiType))
+                {
+                    XElement combinator = expr.Element(ns + "Combinator");
+
+                    if (combinator == null)
+                    {
+                        xsiType = expr.Attribute(xsi + "type")?.Value;
+                    }
+                    else xsiType = combinator?.Attribute(xsi + "type")?.Value;
+                }
+
+                string name = string.Empty;
+                if (isSubGraph) name += "Subgraph ";
+                name += xsiType?.Split(':').Last();
+                if (name == null) name = "Unknown";
+
+                string idName = name;
+
+                if (!nodeTypeCounts.ContainsKey(name))
+                {
+                    nodeTypeCounts[name] = 0;
+                }
+                else idName += nodeTypeCounts[name];
+                nodeTypeCounts[name]++;
+
+
+                return new Tuple<string, string>(idName, name);
+            }
+
+            public static List<string> GetMermaid(XElement parentWorkflow, XDocument doc, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts)
+            {
+                List<string> res = new List<string>();
+
+                IEnumerable<XElement> nodes = parentWorkflow
+                    .Element(ns + "Workflow")?
+                    .Element(ns + "Nodes")?
+                    .Elements(ns + "Expression")
+                    ?? Enumerable.Empty<XElement>();
+
+                IEnumerable<XElement> edgeExpressions = parentWorkflow
+                    .Element(ns + "Workflow")?
+                    .Element(ns + "Edges")?
+                    .Elements(ns + "Edge")
+                    ?? Enumerable.Empty<XElement>();
+
+
+                Dictionary<int, string> nodeNames = nodes
+                    .Select((expr, index) =>
+                    {
+                        Type exprType = GetNodeType(expr, doc, ns, xsi);
+                        string category = GetCategory(exprType);
+
+                        Tuple<string, string> nameTuple = GetName(expr, ns, xsi, nodeTypeCounts);
+
+                        res.Add($"{nameTuple.Item1}({nameTuple.Item2}):::{category}");
+
+                        return new Tuple<int, string>(index, nameTuple.Item1);
+                    })
+                    .ToDictionary(t => t.Item1, t => t.Item2);
+
+
+                List<Tuple<int, int>> edges = edgeExpressions
+                    .Select(e => new Tuple<int, int>(
+                        Convert.ToInt32(e.Attribute("From")?.Value),
+                        Convert.ToInt32(e.Attribute("To")?.Value)
+                    ))
+                    .Where(e => nodeNames.ContainsKey(e.Item1) && nodeNames.ContainsKey(e.Item2))
+                    .ToList();
+
+                foreach (Tuple<int, int> edge in edges)
+                {
+                    string from = nodeNames[edge.Item1];
+                    string to = nodeNames[edge.Item2];
+                    res.Add($"    {from} --> {to}");
+                }
+
+                for (int i = 0; i < nodes.Count(); i++)
+                {
+                    var expr = nodes.ElementAt(i);
+                    var workflow = expr.Element(ns + "Workflow");
+                    if (workflow != null)
+                    {
+                        Tuple<string, string> name = GetName(expr, ns, xsi, nodeTypeCounts, true);
+                        res.Add($"subgraph {name.Item1}[{name.Item2}]");
+                        List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts);
+                        res.AddRange(subGraph);
+                        res.Add("end");
+
+
+                        string target = subGraph.FirstOrDefault();
+                        target = target.Substring(0, target.IndexOf('('));
+
+                        res.Add($"  {nodeNames[i]} <--> {target}");
+                    }
+                }
+
+
+                return res;
+            }
+        }
+
+        void ExportMermaid(string exportFileName, string bonsaiFilePath)
+        {
+            XDocument doc = XDocument.Load(bonsaiFilePath);
+            XNamespace ns = doc.Root.Name.Namespace;
+            XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
+
+            List<string> mermaidLines = new List<string> { "graph LR" };
+
+            mermaidLines.Add("classDef Source fill:#c8f7c5,stroke:#2d862d,stroke-width:2px;");
+            mermaidLines.Add("classDef Transform fill:#cce5ff,stroke:#0059b3,stroke-width:2px;");
+            mermaidLines.Add("classDef Sink fill:#e6ccff,stroke:#663399,stroke-width:2px;");
+            mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;");
+            mermaidLines.Add("classDef Other fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5");
+
+            mermaidLines.AddRange(MermaidConverter.GetMermaid(doc.Root, doc, ns, xsi, new Dictionary<string, int>()));
+
+            File.WriteAllLines(exportFileName, mermaidLines);
+            Console.WriteLine(Path.GetFullPath(exportFileName));
+        }
     }
 }
