@@ -17,6 +17,8 @@ using Bonsai.Design;
 using Bonsai.Editor.GraphModel;
 using Bonsai.Editor.Diagnostics;
 using System.Xml;
+using System.Data.SqlTypes;
+using System.Xml.Linq;
 
 namespace Bonsai.Editor.GraphView
 {
@@ -206,7 +208,11 @@ namespace Bonsai.Editor.GraphView
         private void StoreWorkflowElements()
         {
             var selection = selectionModel.SelectedNodes.SortSelection(Workflow);
-            var text = ElementStore.StoreWorkflowElements(selection.ToWorkflow());
+            var xmlText = ElementStore.StoreWorkflowElements(selection.ToWorkflow());
+            XDocument doc = XDocument.Parse(xmlText);
+            List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc);
+            string text = string.Join(System.Environment.NewLine, mermaid);
+
             if (!string.IsNullOrEmpty(text))
             {
                 Clipboard.SetText(text);
@@ -302,8 +308,12 @@ namespace Bonsai.Editor.GraphView
             {
                 if (Clipboard.ContainsText())
                 {
+                    string mermaid = Clipboard.GetText();
+                    XDocument xml = EditorForm.MermaidConverter.ParseToBonsai(mermaid.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
+                    string xmlString = xml.ToString();
+
                     var workflow = ElementStore.RetrieveWorkflowElements(
-                        Clipboard.GetText(),
+                        xmlString,
                         out SemanticVersion version);
                     UpgradeHelper.TryUpgradeWorkflow(workflow, version, out workflow);
                     InsertWorkflow(workflow.ToInspectableGraph());

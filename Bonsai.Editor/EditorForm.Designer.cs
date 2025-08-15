@@ -47,10 +47,7 @@
             this.exportToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exportImageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.exportPackageToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-
             this.exportMermaidToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.exportMermaidDialog = new System.Windows.Forms.SaveFileDialog();
-
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.exitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.editToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -96,6 +93,7 @@
             this.reportBugToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripSeparator5 = new System.Windows.Forms.ToolStripSeparator();
             this.aboutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.exportMermaidDialog = new System.Windows.Forms.SaveFileDialog();
             this.openWorkflowDialog = new System.Windows.Forms.OpenFileDialog();
             this.saveWorkflowDialog = new System.Windows.Forms.SaveFileDialog();
             this.toolStrip = new System.Windows.Forms.ToolStrip();
@@ -318,9 +316,9 @@
             this.exportPackageToolStripMenuItem.Text = "To &Gallery...";
             this.exportPackageToolStripMenuItem.Click += new System.EventHandler(this.exportPackageToolStripMenuItem_Click);
             // 
-            // mermaidToolStripMenuItem
+            // exportMermaidToolStripMenuItem
             // 
-            this.exportMermaidToolStripMenuItem.Name = "mermaidToolStripMenuItem";
+            this.exportMermaidToolStripMenuItem.Name = "exportMermaidToolStripMenuItem";
             this.exportMermaidToolStripMenuItem.Size = new System.Drawing.Size(372, 44);
             this.exportMermaidToolStripMenuItem.Text = "Mermaid...";
             this.exportMermaidToolStripMenuItem.Click += new System.EventHandler(this.exportMermaidToolStripMenuItem_Click);
@@ -1100,7 +1098,7 @@
             this.toolboxSplitContainer.Panel2.Controls.Add(this.toolboxDescriptionPanel);
             this.toolboxSplitContainer.Selectable = true;
             this.toolboxSplitContainer.Size = new System.Drawing.Size(194, 271);
-            this.toolboxSplitContainer.SplitterDistance = 200;
+            this.toolboxSplitContainer.SplitterDistance = 196;
             this.toolboxSplitContainer.SplitterWidth = 8;
             this.toolboxSplitContainer.TabIndex = 1;
             this.toolboxSplitContainer.TabStop = false;
@@ -1118,7 +1116,7 @@
             this.toolboxTableLayoutPanel.RowCount = 2;
             this.toolboxTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 44F));
             this.toolboxTableLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.toolboxTableLayoutPanel.Size = new System.Drawing.Size(194, 200);
+            this.toolboxTableLayoutPanel.Size = new System.Drawing.Size(194, 196);
             this.toolboxTableLayoutPanel.TabIndex = 2;
             // 
             // searchTextBox
@@ -1159,7 +1157,7 @@
             treeNode4,
             treeNode5,
             treeNode6});
-            this.toolboxTreeView.Size = new System.Drawing.Size(194, 156);
+            this.toolboxTreeView.Size = new System.Drawing.Size(194, 152);
             this.toolboxTreeView.TabIndex = 0;
             this.toolboxTreeView.AfterLabelEdit += new System.Windows.Forms.NodeLabelEditEventHandler(this.toolboxTreeView_AfterLabelEdit);
             this.toolboxTreeView.ItemDrag += new System.Windows.Forms.ItemDragEventHandler(this.toolboxTreeView_ItemDrag);
@@ -1177,7 +1175,7 @@
             this.toolboxDescriptionPanel.Margin = new System.Windows.Forms.Padding(6);
             this.toolboxDescriptionPanel.Name = "toolboxDescriptionPanel";
             this.toolboxDescriptionPanel.Padding = new System.Windows.Forms.Padding(2);
-            this.toolboxDescriptionPanel.Size = new System.Drawing.Size(194, 63);
+            this.toolboxDescriptionPanel.Size = new System.Drawing.Size(194, 67);
             this.toolboxDescriptionPanel.TabIndex = 0;
             // 
             // toolboxDescriptionTextBox
@@ -1188,7 +1186,7 @@
             this.toolboxDescriptionTextBox.Margin = new System.Windows.Forms.Padding(6);
             this.toolboxDescriptionTextBox.Name = "toolboxDescriptionTextBox";
             this.toolboxDescriptionTextBox.ReadOnly = true;
-            this.toolboxDescriptionTextBox.Size = new System.Drawing.Size(190, 59);
+            this.toolboxDescriptionTextBox.Size = new System.Drawing.Size(190, 63);
             this.toolboxDescriptionTextBox.TabIndex = 0;
             this.toolboxDescriptionTextBox.TabStop = false;
             this.toolboxDescriptionTextBox.Text = "";
@@ -1259,7 +1257,7 @@
             // 
             this.workflowSplitContainer.Panel2.Controls.Add(this.propertiesLayoutPanel);
             this.workflowSplitContainer.Size = new System.Drawing.Size(1160, 666);
-            this.workflowSplitContainer.SplitterDistance = 952;
+            this.workflowSplitContainer.SplitterDistance = 948;
             this.workflowSplitContainer.SplitterWidth = 8;
             this.workflowSplitContainer.TabIndex = 0;
             this.workflowSplitContainer.TabStop = false;
@@ -1278,7 +1276,7 @@
             this.propertiesLayoutPanel.RowCount = 2;
             this.propertiesLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 44F));
             this.propertiesLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.propertiesLayoutPanel.Size = new System.Drawing.Size(200, 666);
+            this.propertiesLayoutPanel.Size = new System.Drawing.Size(204, 666);
             this.propertiesLayoutPanel.TabIndex = 3;
             // 
             // propertiesSplitContainer
@@ -1297,7 +1295,7 @@
             // propertiesSplitContainer.Panel2
             // 
             this.propertiesSplitContainer.Panel2.Controls.Add(this.propertyGrid);
-            this.propertiesSplitContainer.Size = new System.Drawing.Size(194, 604);
+            this.propertiesSplitContainer.Size = new System.Drawing.Size(198, 604);
             this.propertiesSplitContainer.SplitterDistance = 59;
             this.propertiesSplitContainer.SplitterWidth = 8;
             this.propertiesSplitContainer.TabIndex = 1;
@@ -1312,7 +1310,7 @@
             this.propertiesDescriptionPanel.Margin = new System.Windows.Forms.Padding(6);
             this.propertiesDescriptionPanel.Name = "propertiesDescriptionPanel";
             this.propertiesDescriptionPanel.Padding = new System.Windows.Forms.Padding(2);
-            this.propertiesDescriptionPanel.Size = new System.Drawing.Size(194, 59);
+            this.propertiesDescriptionPanel.Size = new System.Drawing.Size(198, 59);
             this.propertiesDescriptionPanel.TabIndex = 0;
             // 
             // propertiesDescriptionTextBox
@@ -1323,7 +1321,7 @@
             this.propertiesDescriptionTextBox.Margin = new System.Windows.Forms.Padding(6);
             this.propertiesDescriptionTextBox.Name = "propertiesDescriptionTextBox";
             this.propertiesDescriptionTextBox.ReadOnly = true;
-            this.propertiesDescriptionTextBox.Size = new System.Drawing.Size(190, 55);
+            this.propertiesDescriptionTextBox.Size = new System.Drawing.Size(194, 55);
             this.propertiesDescriptionTextBox.TabIndex = 0;
             this.propertiesDescriptionTextBox.TabStop = false;
             this.propertiesDescriptionTextBox.Text = "";
@@ -1337,7 +1335,7 @@
             this.propertyGrid.Location = new System.Drawing.Point(0, 0);
             this.propertyGrid.Margin = new System.Windows.Forms.Padding(6);
             this.propertyGrid.Name = "propertyGrid";
-            this.propertyGrid.Size = new System.Drawing.Size(194, 537);
+            this.propertyGrid.Size = new System.Drawing.Size(198, 537);
             this.propertyGrid.TabIndex = 0;
             this.propertyGrid.Refreshed += new System.EventHandler(this.propertyGrid_Refreshed);
             this.propertyGrid.DragDrop += new System.Windows.Forms.DragEventHandler(this.propertyGrid_DragDrop);
@@ -1352,7 +1350,7 @@
             this.propertiesLabel.Location = new System.Drawing.Point(0, 12);
             this.propertiesLabel.Margin = new System.Windows.Forms.Padding(0, 0, 6, 0);
             this.propertiesLabel.Name = "propertiesLabel";
-            this.propertiesLabel.Size = new System.Drawing.Size(194, 44);
+            this.propertiesLabel.Size = new System.Drawing.Size(198, 44);
             this.propertiesLabel.TabIndex = 2;
             this.propertiesLabel.Text = "Properties";
             this.propertiesLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
