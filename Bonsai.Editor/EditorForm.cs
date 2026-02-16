@@ -1485,7 +1485,8 @@ namespace Bonsai.Editor
                     HighlightExceptionBuilderNode(workflowException, showMessageBox: shutdown != null);
                 }
                 else editorSite.ShowError(e.Message, Name);
-            };
+            }
+            ;
         }
 
         void HandleWorkflowCompleted()
@@ -3232,254 +3233,288 @@ namespace Bonsai.Editor
 
         public class MermaidConverter
         {
-                //bonsai -> mermaid
-                public static Type GetNodeType(XElement element, XDocument doc, XNamespace ns, XNamespace xsi)
+            //bonsai -> mermaid
+            public static Type GetNodeType(XElement element, XDocument doc, XNamespace ns, XNamespace xsi)
+            {
+                XElement combinator = element.Element(ns + "Combinator");
+                string typeName = combinator?.Attribute(xsi + "type")?.Value;
+
+                if (typeName == null)
                 {
-                    XElement combinator = element.Element(ns + "Combinator");
-                    string typeName = combinator?.Attribute(xsi + "type")?.Value;
+                    typeName = element.Attribute(xsi + "type")?.Value;
+                }
 
-                    if (typeName == null)
-                    {
-                        typeName = element.Attribute(xsi + "type")?.Value;
-                    }
+                if (typeName == null)
+                {
+                    Console.WriteLine($"{element}: Unknown type");
+                    return null;
+                }
 
-                    if (typeName == null)
+                string typeNamespaceAlias = null;
+                string className = null;
+
+                string[] parts = typeName.Split(':');
+
+                if (parts.Length == 2)
+                {
+                    typeNamespaceAlias = parts[0];
+                    className = parts[1];
+                }
+                else if (parts.Length == 1)
+                {
+                    className = parts[0];
+                }
+                else
+                {
+                    Console.WriteLine($"{element} invalid type name");
+                    return null;
+                }
+
+
+                string clrNs = null;
+                string assemblyName = null;
+
+                if (typeNamespaceAlias != null)
+                {
+                    Dictionary<string, string> xmlns = doc.Root.Attributes()
+                        .Where((XAttribute a) => a.IsNamespaceDeclaration && a.Name.Namespace == XNamespace.Xmlns)
+                        .ToDictionary(
+                            (XAttribute a) => a.Name.LocalName,
+                            (XAttribute a) => a.Value
+                        );
+
+                    if (!xmlns.TryGetValue(typeNamespaceAlias, out string clrNamespace))
                     {
-                        Console.WriteLine($"{element}: Unknown type");
+                        Console.WriteLine($"{element} wrong typenamespacealias");
                         return null;
                     }
 
-                    string typeNamespaceAlias = null;
-                    string className = null;
-
-                    string[] parts = typeName.Split(':');
-
-                    if (parts.Length == 2)
+                    string[] clrParts = clrNamespace.Replace("clr-namespace:", "").Split(';');
+                    if (clrParts.Length != 2)
                     {
-                        typeNamespaceAlias = parts[0];
-                        className = parts[1];
-                    }
-                    else if (parts.Length == 1)
-                    {
-                        className = parts[0];
-                    }
-                    else
-                    {
-                        Console.WriteLine($"{element} invalid type name");
+                        Console.WriteLine($"{element} invalid clr namespace format ");
                         return null;
                     }
 
-
-                    string clrNs = null;
-                    string assemblyName = null;
-
-                    if (typeNamespaceAlias != null)
-                    {
-                        Dictionary<string, string> xmlns = doc.Root.Attributes()
-                            .Where((XAttribute a) => a.IsNamespaceDeclaration && a.Name.Namespace == XNamespace.Xmlns)
-                            .ToDictionary(
-                                (XAttribute a) => a.Name.LocalName,
-                                (XAttribute a) => a.Value
-                            );
-
-                        if (!xmlns.TryGetValue(typeNamespaceAlias, out string clrNamespace))
-                        {
-                            Console.WriteLine($"{element} wrong typenamespacealias");
-                            return null;
-                        }
-
-                        string[] clrParts = clrNamespace.Replace("clr-namespace:", "").Split(';');
-                        if (clrParts.Length != 2)
-                        {
-                            Console.WriteLine($"{element} invalid clr namespace format ");
-                            return null;
-                        }
-
-                        clrNs = clrParts[0];
-                        assemblyName = clrParts[1].Replace("assembly=", "");
-                    }
-                    else
-                    {
-                        clrNs = "Bonsai.Expressions";
-                        assemblyName = "Bonsai.Core";
-                    }
+                    clrNs = clrParts[0];
+                    assemblyName = clrParts[1].Replace("assembly=", "");
+                }
+                else
+                {
+                    clrNs = "Bonsai.Expressions";
+                    assemblyName = "Bonsai.Core";
+                }
 
 
-                    Assembly asm;
-                    try
-                    {
-                        asm = Assembly.Load(assemblyName);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"{element} couldnt load assembly  '{assemblyName}': {ex.Message}");
-                        return null;
-                    }
+                Assembly asm;
+                try
+                {
+                    asm = Assembly.Load(assemblyName);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"{element} couldnt load assembly  '{assemblyName}': {ex.Message}");
+                    return null;
+                }
 
-                    Type type = asm.GetType($"{clrNs}.{className}");
+                Type type = asm.GetType($"{clrNs}.{className}");
+                if (type == null)
+                {
+                    className += "Builder";
+
+                    type = asm.GetType($"{clrNs}.{className}");
                     if (type == null)
                     {
-                        className += "Builder";
+                        Console.WriteLine($"{element} couldnt find type '{clrNs}.{className}' in assembly '{assemblyName}'");
+                    }
+                }
 
-                        type = asm.GetType($"{clrNs}.{className}");
-                        if (type == null)
-                        {
-                            Console.WriteLine($"{element} couldnt find type '{clrNs}.{className}' in assembly '{assemblyName}'");
-                        }
+                return type;
+
+
+            }
+
+            public static string GetCategory(Type type)
+            {
+                while (type != null)
+                {
+                    WorkflowElementCategoryAttribute attr = type.GetCustomAttribute<WorkflowElementCategoryAttribute>();
+                    if (attr != null) return attr.Category.ToString();
+
+                    if (type.GetCustomAttribute<CombinatorAttribute>() != null)
+                    {
+                        return "Combinator";
                     }
 
-                    return type;
 
+                    type = type.BaseType;
+                }
+
+                return "Other";
+            }
+
+            public static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
+            {
+                string xsiType = "";
+
+                if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
+                if (string.IsNullOrEmpty(xsiType))
+                {
+                    XElement combinator = expr.Element(ns + "Combinator");
+
+                    if (combinator == null)
+                    {
+                        xsiType = expr.Attribute(xsi + "type")?.Value;
+                    }
+                    else xsiType = combinator?.Attribute(xsi + "type")?.Value;
+                }
+
+                string name = string.Empty;
+                if (isSubGraph) name += "Subgraph ";
+                name += xsiType?.Split(':').Last();
+                if (name == null) name = "Unknown";
+
+                string idName = name;
+
+                if (!nodeTypeCounts.ContainsKey(name))
+                {
+                    nodeTypeCounts[name] = 0;
+                }
+                else idName += nodeTypeCounts[name];
+                nodeTypeCounts[name]++;
+
+
+                return new Tuple<string, string>(idName, name);
+            }
+
+            public static List<string> GetInfo(XDocument doc, XElement expr, XNamespace ns, XNamespace xsi)
+            {
+                List<string> elements = new List<string>();
+
+                string type = expr.Attribute(xsi + "type")?.Value;
+                if (type == "Combinator")
+                {
+                    expr = expr.Element(ns + "Combinator");
+                    type = expr.Attribute(xsi + "type")?.Value;
+                }
+
+                foreach (XElement e in expr.Elements())
+                {
+                    if (e.Name != ns + "Workflow")
+                    {
+                        elements.Add(e.ToString());
+
+                    }
+                }
+
+                return elements;
+            }
+
+
+            public static List<string> GetMermaid(XElement parentWorkflow, XDocument doc, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts)
+            {
+                List<string> res = new List<string>();
+
+                IEnumerable<XElement> nodes = parentWorkflow
+                    .Element(ns + "Workflow")?
+                    .Element(ns + "Nodes")?
+                    .Elements(ns + "Expression")
+                    ?? Enumerable.Empty<XElement>();
+
+                IEnumerable<XElement> edgeExpressions = parentWorkflow
+                    .Element(ns + "Workflow")?
+                    .Element(ns + "Edges")?
+                    .Elements(ns + "Edge")
+                    ?? Enumerable.Empty<XElement>();
+
+                Dictionary<int, string> nodeNames = new Dictionary<int, string>();
+
+                for (int i = 0; i < nodes.Count(); i++)
+                {
+                    XElement expr = nodes.ElementAt(i);
+
+                    Type exprType = GetNodeType(expr, doc, ns, xsi);
+                    string category = GetCategory(exprType);
+
+                    Tuple<string, string> nameTuple = GetName(expr, ns, xsi, nodeTypeCounts);
+
+                    res.Add($"{nameTuple.Item1}({nameTuple.Item2}):::{category}");
+
+                    nodeNames[i] = nameTuple.Item1;
+
+                    List<string> info = GetInfo(doc, expr, ns, xsi);
+
+                    foreach (string s in info)
+                    {
+                        string[] lines = s.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                        foreach (string line in lines.Where(line => line != ""))  res.Add($"%% {line}");
+
+                    }
+
+                    var workflow = expr.Element(ns + "Workflow");
+                    if (workflow != null)
+                    {
+                        Tuple<string, string> name = GetName(expr, ns, xsi, nodeTypeCounts, true);
+
+                        res.Add($"subgraph {name.Item1}[{name.Item2}]");
+                        List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts);
+                        res.AddRange(subGraph);
+                        res.Add("end");
+
+
+                        string target = subGraph.FirstOrDefault();
+                        target = target.Substring(0, target.IndexOf('('));
+
+                        res.Add($"  {nodeNames[i]} <--> {target}");
+                    }
 
                 }
 
-                public static string GetCategory(Type type)
+                List<Tuple<int, int>> edges = edgeExpressions
+                    .Select(e => new Tuple<int, int>(
+                        Convert.ToInt32(e.Attribute("From")?.Value),
+                        Convert.ToInt32(e.Attribute("To")?.Value)
+                    ))
+                    .Where(e => nodeNames.ContainsKey(e.Item1) && nodeNames.ContainsKey(e.Item2))
+                    .ToList();
+
+                foreach (Tuple<int, int> edge in edges)
                 {
-                    while (type != null)
-                    {
-                        WorkflowElementCategoryAttribute attr = type.GetCustomAttribute<WorkflowElementCategoryAttribute>();
-                        if (attr != null) return attr.Category.ToString();
-
-                        if (type.GetCustomAttribute<CombinatorAttribute>() != null)
-                        {
-                            return "Combinator";
-                        }
-
-
-                        type = type.BaseType;
-                    }
-
-                    return "Other";
+                    string from = nodeNames[edge.Item1];
+                    string to = nodeNames[edge.Item2];
+                    res.Add($"    {from} --> {to}");
                 }
+                return res;
+            }
 
-                public static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
-                {
-                    string xsiType = "";
-
-                    if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
-                    if (string.IsNullOrEmpty(xsiType))
-                    {
-                        XElement combinator = expr.Element(ns + "Combinator");
-
-                        if (combinator == null)
-                        {
-                            xsiType = expr.Attribute(xsi + "type")?.Value;
-                        }
-                        else xsiType = combinator?.Attribute(xsi + "type")?.Value;
-                    }
-
-                    string name = string.Empty;
-                    if (isSubGraph) name += "Subgraph ";
-                    name += xsiType?.Split(':').Last();
-                    if (name == null) name = "Unknown";
-
-                    string idName = name;
-
-                    if (!nodeTypeCounts.ContainsKey(name))
-                    {
-                        nodeTypeCounts[name] = 0;
-                    }
-                    else idName += nodeTypeCounts[name];
-                    nodeTypeCounts[name]++;
-
-
-                    return new Tuple<string, string>(idName, name);
-                }
-
-                public static List<string> GetMermaid(XElement parentWorkflow, XDocument doc, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts)
-                {
-                    List<string> res = new List<string>();
-
-                    IEnumerable<XElement> nodes = parentWorkflow
-                        .Element(ns + "Workflow")?
-                        .Element(ns + "Nodes")?
-                        .Elements(ns + "Expression")
-                        ?? Enumerable.Empty<XElement>();
-
-                    IEnumerable<XElement> edgeExpressions = parentWorkflow
-                        .Element(ns + "Workflow")?
-                        .Element(ns + "Edges")?
-                        .Elements(ns + "Edge")
-                        ?? Enumerable.Empty<XElement>();
-
-                    Dictionary<int, string> nodeNames = new Dictionary<int, string>();
-
-                    for (int i = 0; i < nodes.Count(); i++)
-                    {
-                        var expr = nodes.ElementAt(i);
-
-                        Type exprType = GetNodeType(expr, doc, ns, xsi);
-                        string category = GetCategory(exprType);
-
-                        Tuple<string, string> nameTuple = GetName(expr, ns, xsi, nodeTypeCounts);
-
-                        res.Add($"{nameTuple.Item1}({nameTuple.Item2}):::{category}");
-
-                        nodeNames[i] = nameTuple.Item1;
-
-                        var workflow = expr.Element(ns + "Workflow");
-                        if (workflow != null)
-                        {
-                            Tuple<string, string> name = GetName(expr, ns, xsi, nodeTypeCounts, true);
-
-                            res.Add($"subgraph {name.Item1}[{name.Item2}]");
-                            List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts);
-                            res.AddRange(subGraph);
-                            res.Add("end");
-
-
-                            string target = subGraph.FirstOrDefault();
-                            target = target.Substring(0, target.IndexOf('('));
-
-                            res.Add($"  {nodeNames[i]} <--> {target}");
-                        }
-
-                    }
-
-                    List<Tuple<int, int>> edges = edgeExpressions
-                        .Select(e => new Tuple<int, int>(
-                            Convert.ToInt32(e.Attribute("From")?.Value),
-                            Convert.ToInt32(e.Attribute("To")?.Value)
-                        ))
-                        .Where(e => nodeNames.ContainsKey(e.Item1) && nodeNames.ContainsKey(e.Item2))
-                        .ToList();
-
-                    foreach (Tuple<int, int> edge in edges)
-                    {
-                        string from = nodeNames[edge.Item1];
-                        string to = nodeNames[edge.Item2];
-                        res.Add($"    {from} --> {to}");
-                    }
-                    return res;
-                }
-
-                public static List<string> ParseToMermaid(XDocument doc)
-                {
-                    string projectBaseDirectory = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\"));
-                    string outputMermaidPath = Path.Combine(projectBaseDirectory, "workflow.mmd");
+            public static List<string> ParseToMermaid(XDocument doc)
+            {
+                string projectBaseDirectory = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\"));
+                string outputMermaidPath = Path.Combine(projectBaseDirectory, "workflow.mmd");
 
                 XNamespace ns = doc.Root.Name.Namespace;
                 XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
                 List<string> mermaidLines = new List<string>();
 
-                    foreach (XAttribute attr in doc.Root.Attributes())
-                    {
-                        mermaidLines.Add($"%% {attr.ToString()}");
+                foreach (XAttribute attr in doc.Root.Attributes())
+                {
+                    mermaidLines.Add($"%% {attr.ToString()}");
 
-                    }
-                    mermaidLines.Add("graph LR");
-
-                    mermaidLines.Add("classDef Source fill:#c8f7c5,stroke:#2d862d,stroke-width:2px;");
-                    mermaidLines.Add("classDef Transform fill:#cce5ff,stroke:#0059b3,stroke-width:2px;");
-                    mermaidLines.Add("classDef Sink fill:#e6ccff,stroke:#663399,stroke-width:2px;");
-                    mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;");
-                    mermaidLines.Add("classDef Other fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5");
-
-                    mermaidLines.AddRange(GetMermaid(doc.Root, doc, ns, xsi, new Dictionary<string, int>()));
-
-                    return mermaidLines;
                 }
+                mermaidLines.Add("graph LR");
+
+                mermaidLines.Add("classDef Source fill:#c8f7c5,stroke:#2d862d,stroke-width:2px;");
+                mermaidLines.Add("classDef Transform fill:#cce5ff,stroke:#0059b3,stroke-width:2px;");
+                mermaidLines.Add("classDef Sink fill:#e6ccff,stroke:#663399,stroke-width:2px;");
+                mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;");
+                mermaidLines.Add("classDef Other fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5");
+
+                mermaidLines.AddRange(GetMermaid(doc.Root, doc, ns, xsi, new Dictionary<string, int>()));
+                
+                return mermaidLines;
+
+            }
 
 
             //mermaid -> bonsai 
@@ -3504,202 +3539,241 @@ namespace Bonsai.Editor
             }
 
             public static List<XAttribute> ParseAttributes(List<string> lines)
+            {
+                List<XAttribute> attrs = new List<XAttribute>();
+                Regex regex = new Regex(@"^%%\s*(?<name>[^\s=]+)\s*=\s*""(?<value>[^""]*)""");
+
+                foreach (string line in lines)
                 {
-                    List<XAttribute> attrs = new List<XAttribute>();
-                    Regex regex = new Regex(@"^%%\s*(?<name>[^\s=]+)\s*=\s*""(?<value>[^""]*)""");
+                    var match = regex.Match(line);
+                    if (!match.Success)
+                        continue;
 
-                    foreach (string line in lines)
+                    string name = match.Groups["name"].Value;
+                    string value = match.Groups["value"].Value;
+
+                    if (name.StartsWith("xmlns:"))
                     {
-                        var match = regex.Match(line);
-                        if (!match.Success)
-                            continue;
+                        string prefix = name.Substring("xmlns:".Length);
+                        attrs.Add(new XAttribute(XNamespace.Xmlns + prefix, value));
+                    }
+                    else if (name == "xmlns")
+                    {
+                        attrs.Add(new XAttribute("xmlns", value));
+                    }
+                    else
+                    {
+                        attrs.Add(new XAttribute(name, value));
+                    }
+                }
 
-                        string name = match.Groups["name"].Value;
-                        string value = match.Groups["value"].Value;
+                return attrs;
+            }
 
-                        if (name.StartsWith("xmlns:"))
+            public static XElement GetBonsai(List<string> mermaidLines, XNamespace ns, XNamespace xsi, Dictionary<string, int> indexMap, List<XAttribute> attributes, int nodeCount = 0, int recursionOffset = 0)
+            {
+                recursionOffset = nodeCount;
+                XElement element = new XElement(ns + "Workflow");
+                XElement nodes = new XElement(ns + "Nodes");
+                XElement edges = new XElement(ns + "Edges");
+
+                element.Add(nodes);
+                element.Add(edges);
+
+                Regex nodeRgx = new Regex(@"(\w+)\(([^)]+)\):::(\w+)");
+                Regex edgeRgx = new Regex(@"(\w+)\s*-->\s*(\w+)");
+                Regex subStartRgx = new Regex(@"subgraph\s+(\w+)\[?([^\]]*)\]?");
+                Regex subEndRgx = new Regex(@"^\s*end\s*$");
+
+                Dictionary<int, int> targetEdgeCounts = new Dictionary<int, int>();
+                XElement subGraphElement = null;
+
+                for (int i = 0; i < mermaidLines.Count; i++)
+                {
+                    string line = mermaidLines[i];
+
+                    if (string.IsNullOrEmpty(line)) continue;
+
+                    if (nodeRgx.Match(line).Success)
+                    {
+                        Match match = nodeRgx.Match(line);
+
+                        string id = match.Groups[1].Value;
+                        string name = match.Groups[2].Value;
+
+                        indexMap[id] = nodeCount;
+
+                        Type nodeType = GetBonsaiType(name);
+                        bool isCombinator = IsCombinator(nodeType);
+
+                        string xsiName = GetXsiType(attributes, nodeType);
+
+                        if (xsiName.Contains("Builder"))
                         {
-                            string prefix = name.Substring("xmlns:".Length);
-                            attrs.Add(new XAttribute(XNamespace.Xmlns + prefix, value));
+                            xsiName = xsiName.Replace("Builder", "");
                         }
-                        else if (name == "xmlns")
+
+                        XElement contained = null;
+
+                        string xmlText = "";
+                        while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("%%"))
                         {
-                            attrs.Add(new XAttribute("xmlns", value));
+                            i++;
+                            xmlText += mermaidLines[i].Substring(2).Trim();
+                            xmlText += "\n";
+                        }
+                        if (xmlText != "")
+                        {
+                            string containedStr = "<container>" + xmlText + "</container>";
+                            contained = XElement.Parse(containedStr);
+                        }
+
+
+                        XElement node = null;
+                        if (isCombinator)
+                        {
+                            node = new XElement(ns + "Expression",
+                                new XAttribute(xsi + "type", "Combinator"));
+
+                            XElement combinatorElement = new XElement(ns + "Combinator",
+                                new XAttribute(xsi + "type", xsiName));
+
+                            if (contained != null)
+                            {
+                                foreach (XElement e in contained.Elements())
+                                {
+                                    combinatorElement.Add(e);
+                                }
+                            }
+
+                            node.Add(combinatorElement);
                         }
                         else
                         {
-                            attrs.Add(new XAttribute(name, value));
+                            node = new XElement(ns + "Expression",
+                                new XAttribute(xsi + "type", xsiName));
+
+                            if (contained != null)
+                            {
+                                foreach (XElement e in contained.Elements())
+                                {
+                                    node.Add(e);
+                                }
+                            }
                         }
+
+
+
+
+                        if (name == "SelectMany") subGraphElement = node;
+                        else nodes.Add(node);
+                        nodeCount++;
                     }
-
-                    return attrs;
-                }
-
-                public static XElement GetBonsai(List<string> mermaidLines, XNamespace ns, XNamespace xsi, Dictionary<string, int> indexMap, List<XAttribute> attributes, int nodeCount = 0, int recursionOffset = 0)
-                {
-                    recursionOffset = nodeCount;
-                    XElement element = new XElement(ns + "Workflow");
-                    XElement nodes = new XElement(ns + "Nodes");
-                    XElement edges = new XElement(ns + "Edges");
-
-                    element.Add(nodes);
-                    element.Add(edges);
-
-                    Regex nodeRgx = new Regex(@"(\w+)\(([^)]+)\):::(\w+)");
-                    Regex edgeRgx = new Regex(@"(\w+)\s*-->\s*(\w+)");
-                    Regex subStartRgx = new Regex(@"subgraph\s+(\w+)\[?([^\]]*)\]?");
-                    Regex subEndRgx = new Regex(@"^\s*end\s*$");
-
-                    Dictionary<int, int> targetEdgeCounts = new Dictionary<int, int>();
-                    XElement subGraphElement = null;
-
-                    for (int i = 0; i < mermaidLines.Count; i++)
+                    if (edgeRgx.Match(line).Success)
                     {
-                        string line = mermaidLines[i];
+                        Match match = edgeRgx.Match(line);
 
-                        if (string.IsNullOrEmpty(line)) continue;
+                        int from = indexMap[match.Groups[1].Value] - recursionOffset;
+                        int to = indexMap[match.Groups[2].Value] - recursionOffset;
 
-                        if (nodeRgx.Match(line).Success)
+                        int pos = 1;
+                        if (targetEdgeCounts.ContainsKey(to))
                         {
-                            Match match = nodeRgx.Match(line);
-
-                            string id = match.Groups[1].Value;
-                            string name = match.Groups[2].Value;
-
-                            indexMap[id] = nodeCount;
-
-                            Type nodeType = GetBonsaiType(name);
-                            bool isCombinator = IsCombinator(nodeType);
-
-                            string xsiName = GetXsiType(attributes, nodeType);
-
-                            if (xsiName.Contains("Builder"))
-                            {
-                                xsiName = xsiName.Replace("Builder", "");
-                            }
-
-                            XElement node = null;
-                            if (isCombinator)
-                            {
-                                node = new XElement(ns + "Expression",
-                                    new XAttribute(xsi + "type", "Combinator"));
-                                node.Add(new XElement(ns + "Combinator",
-                                    new XAttribute(xsi + "type", $"{xsiName}")));
-                            }
-                            else
-                                node = new XElement(ns + "Expression",
-                                    new XAttribute(xsi + "type", xsiName));
-
-
-                            if (name == "SelectMany") subGraphElement = node;
-                            else nodes.Add(node);
-                            nodeCount++;
+                            pos = targetEdgeCounts[to] + 1;
                         }
-                        if (edgeRgx.Match(line).Success)
+                        else targetEdgeCounts[to] = 1;
+
+                        XElement edge = new XElement(ns + "Edge",
+                            new XAttribute("From", from),
+                            new XAttribute("To", to),
+                            new XAttribute("Label", $"Source{pos}")
+                        );
+
+                        edges.Add(edge);
+                    }
+                    if (subStartRgx.Match(line).Success)
+                    {
+                        Match match = subStartRgx.Match(line);
+
+                        i++;
+                        int nestingDepth = 1;
+                        List<string> subGraphLines = new List<string>();
+                        while (true)
                         {
-                            Match match = edgeRgx.Match(line);
+                            string subLine = mermaidLines[i];
 
-                            int from = indexMap[match.Groups[1].Value] - recursionOffset;
-                            int to = indexMap[match.Groups[2].Value] - recursionOffset;
+                            if (subStartRgx.IsMatch(subLine)) nestingDepth++;
+                            else if (subEndRgx.IsMatch(subLine)) nestingDepth--;
+                            if (nestingDepth == 0) break;
 
-                            int pos = 1;
-                            if (targetEdgeCounts.ContainsKey(to))
-                            {
-                                pos = targetEdgeCounts[to] + 1;
-                            }
-                            else targetEdgeCounts[to] = 1;
-
-                            XElement edge = new XElement(ns + "Edge",
-                                new XAttribute("From", from),
-                                new XAttribute("To", to),
-                                new XAttribute("Label", $"Source{pos}")
-                            );
-
-                            edges.Add(edge);
-                        }
-                        if (subStartRgx.Match(line).Success)
-                        {
-                            Match match = subStartRgx.Match(line);
-
+                            subGraphLines.Add(mermaidLines[i]);
                             i++;
-                            int nestingDepth = 1;
-                            List<string> subGraphLines = new List<string>();
-                            while (true)
-                            {
-                                string subLine = mermaidLines[i];
-
-                                if (subStartRgx.IsMatch(subLine)) nestingDepth++;
-                                else if (subEndRgx.IsMatch(subLine)) nestingDepth--;
-                                if (nestingDepth == 0) break;
-
-                                subGraphLines.Add(mermaidLines[i]);
-                                i++;
-                            }
-
-                            XElement subworkflow = GetBonsai(subGraphLines, ns, xsi, indexMap, attributes, nodeCount);
-
-                            subGraphElement.Add(subworkflow);
-
-                            nodes.Add(subGraphElement);
                         }
 
+                        XElement subworkflow = GetBonsai(subGraphLines, ns, xsi, indexMap, attributes, nodeCount);
+
+                        subGraphElement.Add(subworkflow);
+
+                        nodes.Add(subGraphElement);
                     }
 
-                    return element;
                 }
 
-                public static Type GetBonsaiType(string name)
+                return element;
+            }
+
+            public static Type GetBonsaiType(string name)
+            {
+                foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
                 {
-                    foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+                    Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
+                    if (type != null) return type;
+                }
+                name += "Builder";
+                foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
+                    if (type != null) return type;
+                }
+                return null;
+            }
+
+            public static bool IsCombinator(Type type)
+            {
+                while (type != null)
+                {
+                    if (type.GetCustomAttribute<CombinatorAttribute>() != null)
                     {
-                        Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
-                        if (type != null) return type;
+                        return true;
                     }
-                    name += "Builder";
-                    foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
-                        if (type != null) return type;
-                    }
-                    return null;
+
+
+                    type = type.BaseType;
                 }
 
-                public static bool IsCombinator(Type type)
+                return false;
+            }
+
+            public static string GetXsiType(List<XAttribute> rootAttributes, Type type)
+            {
+                string clrNs = $"clr-namespace:{type.Namespace};assembly={type.Assembly.GetName().Name}";
+
+                foreach (XAttribute attr in rootAttributes)
                 {
-                    while (type != null)
+                    if (attr.IsNamespaceDeclaration)
                     {
-                        if (type.GetCustomAttribute<CombinatorAttribute>() != null)
+                        string prefix = attr.Name.LocalName;
+                        string nsValue = attr.Value;
+
+                        if (nsValue == clrNs)
                         {
-                            return true;
-                        }
-
-
-                        type = type.BaseType;
-                    }
-
-                    return false;
-                }
-
-                public static string GetXsiType(List<XAttribute> rootAttributes, Type type)
-                {
-                    string clrNs = $"clr-namespace:{type.Namespace};assembly={type.Assembly.GetName().Name}";
-
-                    foreach (XAttribute attr in rootAttributes)
-                    {
-                        if (attr.IsNamespaceDeclaration)
-                        {
-                            string prefix = attr.Name.LocalName;
-                            string nsValue = attr.Value;
-
-                            if (nsValue == clrNs)
-                            {
-                                return $"{prefix}:{type.Name}";
-                            }
+                            return $"{prefix}:{type.Name}";
                         }
                     }
-
-                    return type.Name;
                 }
+
+                return type.Name;
+            }
         }
 
         void ExportMermaid(string exportFileName, string bonsaiFilePath)

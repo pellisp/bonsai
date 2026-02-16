@@ -205,6 +205,7 @@ namespace Bonsai.Editor.GraphView
             }
         }
 
+        //
         private void StoreWorkflowElements()
         {
             var selection = selectionModel.SelectedNodes.SortSelection(Workflow);
@@ -218,6 +219,8 @@ namespace Bonsai.Editor.GraphView
                 Clipboard.SetText(text);
             }
         }
+
+        //
 
         private void ShowClipboardError(InvalidOperationException ex, string message)
         {
@@ -280,6 +283,7 @@ namespace Bonsai.Editor.GraphView
             EditorControl.UpdateWatchTool();
         }
 
+        //-------------------------------------------
         public void CutToClipboard()
         {
             try
@@ -324,6 +328,8 @@ namespace Bonsai.Editor.GraphView
                 ShowClipboardError(ex, Resources.PasteFromClipboard_Error);
             }
         }
+
+        //---------------------------------------
 
         public void CreateGraphNode(string name, string typeName, ElementCategory elementCategory, CreateGraphNodeType nodeType, bool branch, bool group)
         {
