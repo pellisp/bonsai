@@ -3330,8 +3330,6 @@ namespace Bonsai.Editor
                 }
 
                 return type;
-
-
             }
 
             public static string GetCategory(Type type)
@@ -3410,7 +3408,7 @@ namespace Bonsai.Editor
             }
 
 
-            public static List<string> GetMermaid(XElement parentWorkflow, XDocument doc, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts)
+            public static List<string> GetMermaid(XElement parentWorkflow, XDocument doc, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool displaySubgraphs)
             {
                 List<string> res = new List<string>();
 
@@ -3446,7 +3444,7 @@ namespace Bonsai.Editor
                     foreach (string s in info)
                     {
                         string[] lines = s.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-                        foreach (string line in lines.Where(line => line != ""))  res.Add($"%% {line}");
+                        foreach (string line in lines.Where(line => line != "")) res.Add($"%%c {line}");
 
                     }
 
@@ -3455,16 +3453,33 @@ namespace Bonsai.Editor
                     {
                         Tuple<string, string> name = GetName(expr, ns, xsi, nodeTypeCounts, true);
 
-                        res.Add($"subgraph {name.Item1}[{name.Item2}]");
-                        List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts);
-                        res.AddRange(subGraph);
-                        res.Add("end");
+                        List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts, displaySubgraphs);
+                        if (displaySubgraphs)
+                        {
+                            res.Add($"subgraph {name.Item1}[{name.Item2}]");
+                            res.AddRange(subGraph.Select(s => $"{s}"));
+                            res.Add("end");
+                        }
+                        else
+                        {
+                            res.Add($"%% subgraph {name.Item1}[{name.Item2}]");
+
+                            foreach (string s in subGraph)
+                            {
+                                if (!s.StartsWith("%%")) res.Add($"%%  {s}");
+                                else res.Add(s);
+                            }
+
+                            res.Add("%% end");
+                        }
+
 
 
                         string target = subGraph.FirstOrDefault();
                         target = target.Substring(0, target.IndexOf('('));
 
-                        res.Add($"  {nodeNames[i]} <--> {target}");
+                        if (displaySubgraphs) res.Add($"{nodeNames[i]} <--> {target}");
+                        else res.Add($"%%  {nodeNames[i]} <--> {target}");
                     }
 
                 }
@@ -3486,7 +3501,7 @@ namespace Bonsai.Editor
                 return res;
             }
 
-            public static List<string> ParseToMermaid(XDocument doc)
+            public static List<string> ParseToMermaid(XDocument doc, bool displaySubgraphs)
             {
                 string projectBaseDirectory = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\..\"));
                 string outputMermaidPath = Path.Combine(projectBaseDirectory, "workflow.mmd");
@@ -3495,6 +3510,8 @@ namespace Bonsai.Editor
                 XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
                 List<string> mermaidLines = new List<string>();
+
+                mermaidLines.Add($"%% displaySubgraphs: {displaySubgraphs}");
 
                 foreach (XAttribute attr in doc.Root.Attributes())
                 {
@@ -3509,8 +3526,8 @@ namespace Bonsai.Editor
                 mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;");
                 mermaidLines.Add("classDef Other fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5");
 
-                mermaidLines.AddRange(GetMermaid(doc.Root, doc, ns, xsi, new Dictionary<string, int>()));
-                
+                mermaidLines.AddRange(GetMermaid(doc.Root, doc, ns, xsi, new Dictionary<string, int>(), displaySubgraphs));
+
                 return mermaidLines;
 
             }
@@ -3532,7 +3549,9 @@ namespace Bonsai.Editor
 
                 foreach (XAttribute a in attributes) doc.Root.Add(a);
 
-                doc.Root.Add(GetBonsai(mermaidLines, ns, xsi, new Dictionary<string, int>(), attributes));
+                bool displaySubgraphs = mermaidLines[0].Split(' ')[2] == "True" ? true : false;
+
+                doc.Root.Add(GetBonsai(mermaidLines, ns, xsi, new Dictionary<string, int>(), attributes, displaySubgraphs));
 
                 return doc;
             }
@@ -3569,7 +3588,7 @@ namespace Bonsai.Editor
                 return attrs;
             }
 
-            public static XElement GetBonsai(List<string> mermaidLines, XNamespace ns, XNamespace xsi, Dictionary<string, int> indexMap, List<XAttribute> attributes, int nodeCount = 0, int recursionOffset = 0)
+            public static XElement GetBonsai(List<string> mermaidLines, XNamespace ns, XNamespace xsi, Dictionary<string, int> indexMap, List<XAttribute> attributes, bool displaySubgraphs, int nodeCount = 0, int recursionOffset = 0)
             {
                 recursionOffset = nodeCount;
                 XElement element = new XElement(ns + "Workflow");
@@ -3586,6 +3605,14 @@ namespace Bonsai.Editor
 
                 Dictionary<int, int> targetEdgeCounts = new Dictionary<int, int>();
                 XElement subGraphElement = null;
+
+                if (!displaySubgraphs)
+                {
+                    for (int i = 0; i < mermaidLines.Count; i++)
+                    {
+                        if (mermaidLines[i].StartsWith("%%")) mermaidLines[i] = mermaidLines[i].Substring(2).Trim();
+                    }
+                }
 
                 for (int i = 0; i < mermaidLines.Count; i++)
                 {
@@ -3615,7 +3642,7 @@ namespace Bonsai.Editor
                         XElement contained = null;
 
                         string xmlText = "";
-                        while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("%%"))
+                        while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("c") && !subStartRgx.Match(mermaidLines[i + 1]).Success)
                         {
                             i++;
                             xmlText += mermaidLines[i].Substring(2).Trim();
@@ -3697,24 +3724,24 @@ namespace Bonsai.Editor
                         i++;
                         int nestingDepth = 1;
                         List<string> subGraphLines = new List<string>();
-                        while (true)
+                        while (i < mermaidLines.Count)
                         {
                             string subLine = mermaidLines[i];
 
-                            if (subStartRgx.IsMatch(subLine)) nestingDepth++;
-                            else if (subEndRgx.IsMatch(subLine)) nestingDepth--;
+                            if (subStartRgx.Match(subLine).Success) nestingDepth++;
+                            else if (subEndRgx.Match(subLine).Success) nestingDepth--;
                             if (nestingDepth == 0) break;
 
                             subGraphLines.Add(mermaidLines[i]);
                             i++;
                         }
-
-                        XElement subworkflow = GetBonsai(subGraphLines, ns, xsi, indexMap, attributes, nodeCount);
+                        XElement subworkflow = GetBonsai(subGraphLines, ns, xsi, indexMap, attributes, displaySubgraphs, nodeCount);
 
                         subGraphElement.Add(subworkflow);
 
                         nodes.Add(subGraphElement);
                     }
+
 
                 }
 
@@ -3779,10 +3806,9 @@ namespace Bonsai.Editor
         {
             XDocument doc = XDocument.Load(bonsaiFilePath);
 
-            List<string> mermaidLines = MermaidConverter.ParseToMermaid(doc);
+            List<string> mermaidLines = MermaidConverter.ParseToMermaid(doc, true);
 
             File.WriteAllLines(exportFileName, mermaidLines);
-            Console.WriteLine(Path.GetFullPath(exportFileName));
         }
     }
 }

@@ -206,15 +206,15 @@ namespace Bonsai.Editor.GraphView
         }
 
         //
-        private void StoreWorkflowElements(bool mmd = false)
+        private void StoreWorkflowElements(bool copyAsMermaid = false, bool displaySubgraphs = true)
         {
             var selection = selectionModel.SelectedNodes.SortSelection(Workflow);
             var xmlText = ElementStore.StoreWorkflowElements(selection.ToWorkflow());
             string text = xmlText;
-            if (mmd)
+            if (copyAsMermaid)
             {
                 XDocument doc = XDocument.Parse(xmlText);
-                List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc);
+                List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc, displaySubgraphs);
                 text = string.Join(System.Environment.NewLine, mermaid);
             }
 
@@ -347,6 +347,16 @@ namespace Bonsai.Editor.GraphView
                     ShowClipboardError(ex, Resources.CopyToClipboard_Error);
                 }   
                 return true; 
+            }
+
+            if (keyData == (Keys.Control | Keys.M | Keys.Shift))
+            {
+                try { StoreWorkflowElements(true, false); }
+                catch (InvalidOperationException ex)
+                {
+                    ShowClipboardError(ex, Resources.CopyToClipboard_Error);
+                }
+                return true;
             }
 
             return base.ProcessCmdKey(ref msg, keyData);
