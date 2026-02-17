@@ -3688,10 +3688,7 @@ namespace Bonsai.Editor
                             }
                         }
 
-
-
-
-                        if (name == "SelectMany") subGraphElement = node;
+                        if (name == "SelectMany" || name == "Defer" || name == "GroupWorkflow") subGraphElement = node;
                         else nodes.Add(node);
                         nodeCount++;
                     }
