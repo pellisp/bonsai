@@ -3473,13 +3473,15 @@ namespace Bonsai.Editor
                             res.Add("%% end");
                         }
 
+                        string? target = subGraph.FirstOrDefault();
+                        if (!string.IsNullOrEmpty(target))
+                        {
+                            int index = target.IndexOf('(');
+                            if (index >= 0) target = target.Substring(0, index);
 
-
-                        string target = subGraph.FirstOrDefault();
-                        target = target.Substring(0, target.IndexOf('('));
-
-                        if (displaySubgraphs) res.Add($"{nodeNames[i]} <--> {target}");
-                        else res.Add($"%%  {nodeNames[i]} <--> {target}");
+                            if (displaySubgraphs) res.Add($"{nodeNames[i]} <--> {target}");
+                            else res.Add($"%%  {nodeNames[i]} <--> {target}");
+                        }
                     }
 
                 }
@@ -3716,7 +3718,7 @@ namespace Bonsai.Editor
                     }
                     if (subStartRgx.Match(line).Success)
                     {
-                        Match match = subStartRgx.Match(line);
+                        //Match match = subStartRgx.Match(line);
 
                         i++;
                         int nestingDepth = 1;
