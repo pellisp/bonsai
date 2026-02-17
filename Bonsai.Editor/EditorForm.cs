@@ -3403,7 +3403,6 @@ namespace Bonsai.Editor
                     if (e.Name != ns + "Workflow")
                     {
                         elements.Add(e.ToString());
-
                     }
                 }
 
@@ -3781,7 +3780,6 @@ namespace Bonsai.Editor
             XDocument doc = XDocument.Load(bonsaiFilePath);
 
             List<string> mermaidLines = MermaidConverter.ParseToMermaid(doc);
-
 
             File.WriteAllLines(exportFileName, mermaidLines);
             Console.WriteLine(Path.GetFullPath(exportFileName));

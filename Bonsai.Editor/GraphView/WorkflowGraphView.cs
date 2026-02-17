@@ -206,13 +206,17 @@ namespace Bonsai.Editor.GraphView
         }
 
         //
-        private void StoreWorkflowElements()
+        private void StoreWorkflowElements(bool mmd = false)
         {
             var selection = selectionModel.SelectedNodes.SortSelection(Workflow);
             var xmlText = ElementStore.StoreWorkflowElements(selection.ToWorkflow());
-            XDocument doc = XDocument.Parse(xmlText);
-            List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc);
-            string text = string.Join(System.Environment.NewLine, mermaid);
+            string text = xmlText;
+            if (mmd)
+            {
+                XDocument doc = XDocument.Parse(xmlText);
+                List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc);
+                text = string.Join(System.Environment.NewLine, mermaid);
+            }
 
             if (!string.IsNullOrEmpty(text))
             {
@@ -312,12 +316,16 @@ namespace Bonsai.Editor.GraphView
             {
                 if (Clipboard.ContainsText())
                 {
-                    string mermaid = Clipboard.GetText();
-                    XDocument xml = EditorForm.MermaidConverter.ParseToBonsai(mermaid.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
-                    string xmlString = xml.ToString();
+                    string text = Clipboard.GetText();
+                    if (text[0] == '%')
+                    {
+                        XDocument xml = EditorForm.MermaidConverter.ParseToBonsai(text.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
+                        text = xml.ToString();
+                    }
+
 
                     var workflow = ElementStore.RetrieveWorkflowElements(
-                        xmlString,
+                        text,
                         out SemanticVersion version);
                     UpgradeHelper.TryUpgradeWorkflow(workflow, version, out workflow);
                     InsertWorkflow(workflow.ToInspectableGraph());
@@ -327,6 +335,21 @@ namespace Bonsai.Editor.GraphView
             {
                 ShowClipboardError(ex, Resources.PasteFromClipboard_Error);
             }
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Control | Keys.M))
+            {
+                try { StoreWorkflowElements(true); }
+                catch (InvalidOperationException ex)
+                {
+                    ShowClipboardError(ex, Resources.CopyToClipboard_Error);
+                }   
+                return true; 
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         //---------------------------------------
