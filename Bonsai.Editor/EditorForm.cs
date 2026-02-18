@@ -3353,6 +3353,22 @@ namespace Bonsai.Editor
 
             public static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
             {
+                /*
+                string? definedName = expr.Element(ns + "Name")?.Value;
+                //Console.WriteLine(definedName);
+
+                Console.WriteLine(definedName);
+
+                XElement property = expr.Element("Property");
+                if (property != null && definedName == null)
+                {
+                    definedName = property.Attribute(xsi + "Name")?.Value;
+                }
+
+                Console.WriteLine(definedName);
+                Console.WriteLine(".");
+
+                */
                 string xsiType = "";
 
                 if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
@@ -3382,7 +3398,7 @@ namespace Bonsai.Editor
                 nodeTypeCounts[name]++;
 
 
-                return new Tuple<string, string>(idName, name);
+                return new Tuple<string, string>(idName, name);// definedName == null ? name : definedName);
             }
 
             public static List<string> GetInfo(XDocument doc, XElement expr, XNamespace ns, XNamespace xsi)
@@ -3631,10 +3647,15 @@ namespace Bonsai.Editor
 
                         indexMap[id] = nodeCount;
 
-                        Type nodeType = GetBonsaiType(name);
+                        while (int.TryParse(id.Last().ToString(), out _))
+                        {
+                            id = id.Substring(0, id.Length - 1);
+                        }
+
+                        Type nodeType = GetBonsaiType(id);
                         bool isCombinator = IsCombinator(nodeType);
 
-                        string xsiName = GetXsiType(attributes, nodeType);
+                        string xsiName = GetXsiType(attributes, nodeType); //nodetype null
 
                         if (xsiName.Contains("Builder"))
                         {
@@ -3690,7 +3711,7 @@ namespace Bonsai.Editor
                             }
                         }
 
-                        if (name == "SelectMany" || name == "Defer" || name == "GroupWorkflow") subGraphElement = node;
+                        if (id == "SelectMany" || id == "Defer" || id == "GroupWorkflow") subGraphElement = node;
                         else nodes.Add(node);
                         nodeCount++;
                     }
@@ -3718,8 +3739,6 @@ namespace Bonsai.Editor
                     }
                     if (subStartRgx.Match(line).Success)
                     {
-                        //Match match = subStartRgx.Match(line);
-
                         i++;
                         int nestingDepth = 1;
                         List<string> subGraphLines = new List<string>();
@@ -3760,7 +3779,9 @@ namespace Bonsai.Editor
                     Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
                     if (type != null) return type;
                 }
-                return null;
+                Console.WriteLine(name);
+
+                return typeof(ExternalizedMapping);
             }
 
             public static bool IsCombinator(Type type)
@@ -3782,7 +3803,7 @@ namespace Bonsai.Editor
             public static string GetXsiType(List<XAttribute> rootAttributes, Type type)
             {
                 string clrNs = $"clr-namespace:{type.Namespace};assembly={type.Assembly.GetName().Name}";
-
+               
                 foreach (XAttribute attr in rootAttributes)
                 {
                     if (attr.IsNamespaceDeclaration)
