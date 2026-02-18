@@ -3353,22 +3353,25 @@ namespace Bonsai.Editor
 
             public static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
             {
-                /*
+                
                 string? definedName = expr.Element(ns + "Name")?.Value;
                 //Console.WriteLine(definedName);
 
                 Console.WriteLine(definedName);
 
-                XElement property = expr.Element("Property");
-                if (property != null && definedName == null)
+                XElement property = expr.Element(ns + "Property");
+                if (property != null)
                 {
-                    definedName = property.Attribute(xsi + "Name")?.Value;
+                    //Console.WriteLine(property);
+                    if (definedName == null) definedName = property.Attributes("Name").First().Value;
+                    if (definedName == null) definedName = property.Attributes("DisplayName").First().Value;
+                    if (definedName == null) definedName = property.Attributes().First().Value;
                 }
 
                 Console.WriteLine(definedName);
                 Console.WriteLine(".");
 
-                */
+                
                 string xsiType = "";
 
                 if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
@@ -3398,7 +3401,7 @@ namespace Bonsai.Editor
                 nodeTypeCounts[name]++;
 
 
-                return new Tuple<string, string>(idName, name);// definedName == null ? name : definedName);
+                return new Tuple<string, string>(idName, definedName == null ? name : definedName);
             }
 
             public static List<string> GetInfo(XDocument doc, XElement expr, XNamespace ns, XNamespace xsi)
@@ -3624,12 +3627,9 @@ namespace Bonsai.Editor
                 Dictionary<int, int> targetEdgeCounts = new Dictionary<int, int>();
                 XElement subGraphElement = null;
 
-                if (!displaySubgraphs)
+                for (int i = 0; i < mermaidLines.Count; i++)
                 {
-                    for (int i = 0; i < mermaidLines.Count; i++)
-                    {
-                        if (mermaidLines[i].StartsWith("%%")) mermaidLines[i] = mermaidLines[i].Substring(2).Trim();
-                    }
+                    if (mermaidLines[i].StartsWith("%%")) mermaidLines[i] = mermaidLines[i].Substring(2).Trim();
                 }
 
                 for (int i = 0; i < mermaidLines.Count; i++)
@@ -3803,7 +3803,7 @@ namespace Bonsai.Editor
             public static string GetXsiType(List<XAttribute> rootAttributes, Type type)
             {
                 string clrNs = $"clr-namespace:{type.Namespace};assembly={type.Assembly.GetName().Name}";
-               
+
                 foreach (XAttribute attr in rootAttributes)
                 {
                     if (attr.IsNamespaceDeclaration)
