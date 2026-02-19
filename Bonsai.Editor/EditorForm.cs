@@ -3337,18 +3337,21 @@ namespace Bonsai.Editor
                 while (type != null)
                 {
                     WorkflowElementCategoryAttribute attr = type.GetCustomAttribute<WorkflowElementCategoryAttribute>();
-                    if (attr != null) return attr.Category.ToString();
+                    if (attr != null)
+                    {
+                        string category = attr.Category.ToString();
+                        return category;
+                    }
 
                     if (type.GetCustomAttribute<CombinatorAttribute>() != null)
                     {
                         return "Combinator";
                     }
 
-
                     type = type.BaseType;
                 }
 
-                return "Other";
+                return "Unknown";
             }
 
             public static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
@@ -3547,9 +3550,11 @@ namespace Bonsai.Editor
                 mermaidLines.Add("classDef Source fill:#c8f7c5,stroke:#2d862d,stroke-width:2px;");
                 mermaidLines.Add("classDef Transform fill:#cce5ff,stroke:#0059b3,stroke-width:2px;");
                 mermaidLines.Add("classDef Sink fill:#e6ccff,stroke:#663399,stroke-width:2px;");
-                mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;");
-                mermaidLines.Add("classDef Other fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5");
-
+                mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;"); 
+                mermaidLines.Add("classDef Property fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5;");
+                mermaidLines.Add("classDef Workflow fill:#fff3cd,stroke:#b38f00,stroke-width:2px,stroke-dasharray: 5 5;");
+                mermaidLines.Add("classDef Unknown fill:#e0e0e0,stroke:#999999,stroke-dasharray: 5 5;");
+                
                 mermaidLines.AddRange(GetMermaid(doc.Root, doc, ns, xsi, new Dictionary<string, int>(), displaySubgraphs));
 
                 return mermaidLines;
@@ -3714,7 +3719,12 @@ namespace Bonsai.Editor
                             }
                         }
 
-                        if (id == "SelectMany" || id == "Defer" || id == "GroupWorkflow") subGraphElement = node;
+                        if (node.Element(ns + "Workflow") != null)
+                        {
+                            subGraphElement = node;
+                            throw new Exception();
+                        }
+                        if (id == "SelectMany" || id == "Defer" || id == "GroupWorkflow" || id == "Condition") subGraphElement = node;
                         else nodes.Add(node);
                         nodeCount++;
                     }
