@@ -3355,22 +3355,14 @@ namespace Bonsai.Editor
             {
                 
                 string? definedName = expr.Element(ns + "Name")?.Value;
-                //Console.WriteLine(definedName);
-
-                Console.WriteLine(definedName);
 
                 XElement property = expr.Element(ns + "Property");
                 if (property != null)
                 {
-                    //Console.WriteLine(property);
-                    if (definedName == null) definedName = property.Attributes("Name").First().Value;
-                    if (definedName == null) definedName = property.Attributes("DisplayName").First().Value;
-                    if (definedName == null) definedName = property.Attributes().First().Value;
+                    if (definedName == null) definedName = property.Attribute("DisplayName")?.Value;
+                    if (definedName == null) definedName = property.Attribute("Name")?.Value;
+                    if (definedName == null) definedName = property.Attributes().FirstOrDefault()?.Value;
                 }
-
-                Console.WriteLine(definedName);
-                Console.WriteLine(".");
-
                 
                 string xsiType = "";
 
@@ -3781,7 +3773,7 @@ namespace Bonsai.Editor
                 }
                 Console.WriteLine(name);
 
-                return typeof(ExternalizedMapping);
+                return typeof(ExternalizedMapping); //assumes name without type is externalizedmapping
             }
 
             public static bool IsCombinator(Type type)
