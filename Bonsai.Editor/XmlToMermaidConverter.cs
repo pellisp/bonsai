@@ -7,22 +7,6 @@ using System.Xml.Linq;
 using Bonsai.Expressions;
 using System.Reactive.Linq;
 using System.IO;
-using System.Windows.Forms.Design;
-using System.Reactive.Concurrency;
-using System.Reactive;
-using System.Globalization;
-using System.Reactive.Subjects;
-using System.Reactive.Threading.Tasks;
-using Bonsai.Editor.Scripting;
-using Bonsai.Editor.Themes;
-using Bonsai.Editor.GraphView;
-using Bonsai.Editor.GraphModel;
-using System.Threading.Tasks;
-using System.Threading;
-using System.Net;
-using System.Xml.Linq;
-using System.Reflection;
-using System.Text.RegularExpressions;
 
 namespace Bonsai.Editor
 {
