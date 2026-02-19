@@ -3356,14 +3356,25 @@ namespace Bonsai.Editor
                 
                 string? definedName = expr.Element(ns + "Name")?.Value;
 
-                XElement property = expr.Element(ns + "Property");
-                if (property != null)
+                IEnumerable<XElement>? properties = expr.Elements(ns + "Property");
+
+                string typeVal = expr.Attribute(xsi + "type")?.Value;
+                if (typeVal == "PropertyMapping" || typeVal == "InputMapping")
                 {
-                    if (definedName == null) definedName = property.Attribute("DisplayName")?.Value;
-                    if (definedName == null) definedName = property.Attribute("Name")?.Value;
-                    if (definedName == null) definedName = property.Attributes().FirstOrDefault()?.Value;
+                    properties = expr.Element(ns + "PropertyMappings")?.Elements(ns + "Property");
                 }
-                
+
+                foreach (XElement property in properties)
+                {
+                    string? currName = null;
+                    if (currName == null) currName = property.Attribute("DisplayName")?.Value;
+                    if (currName == null) currName = property.Attribute("Name")?.Value;
+                    if (currName == null) currName = property.Attributes().FirstOrDefault()?.Value;
+
+                    if (currName != null) definedName += $"{currName}, ";
+                }
+                if (definedName != null) definedName = definedName.TrimEnd(',', ' ');
+
                 string xsiType = "";
 
                 if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
