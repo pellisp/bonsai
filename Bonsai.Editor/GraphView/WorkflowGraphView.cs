@@ -214,7 +214,7 @@ namespace Bonsai.Editor.GraphView
             if (copyAsMermaid)
             {
                 XDocument doc = XDocument.Parse(xmlText);
-                List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc, displaySubgraphs);
+                List<string> mermaid = Bonsai.Editor.XmlToMermaidConverter.ParseToMermaid(doc, displaySubgraphs);
                 text = string.Join(System.Environment.NewLine, mermaid);
             }
 
@@ -319,7 +319,7 @@ namespace Bonsai.Editor.GraphView
                     string text = Clipboard.GetText();
                     if (text[0] == '%')
                     {
-                        XDocument xml = EditorForm.MermaidConverter.ParseToBonsai(text.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
+                        XDocument xml = Bonsai.Editor.XmlToMermaidConverter.ParseToXml(text.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
                         text = xml.ToString();
                     }
 
