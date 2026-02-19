@@ -3671,13 +3671,20 @@ namespace Bonsai.Editor
                         }
 
                         XElement contained = null;
+                        bool subGraph = false;
 
                         string xmlText = "";
-                        while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("c") && !subStartRgx.Match(mermaidLines[i + 1]).Success)
+                        while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("c"))
                         {
                             i++;
                             xmlText += mermaidLines[i].Substring(2).Trim();
                             xmlText += "\n";
+
+                            if (subStartRgx.Match(mermaidLines[i + 1]).Success)
+                            {
+                                subGraph = true;
+                                break;
+                            }
                         }
                         if (xmlText != "")
                         {
@@ -3719,12 +3726,7 @@ namespace Bonsai.Editor
                             }
                         }
 
-                        if (node.Element(ns + "Workflow") != null)
-                        {
-                            subGraphElement = node;
-                            throw new Exception();
-                        }
-                        if (id == "SelectMany" || id == "Defer" || id == "GroupWorkflow" || id == "Condition") subGraphElement = node;
+                        if (subGraph) subGraphElement = node;
                         else nodes.Add(node);
                         nodeCount++;
                     }
