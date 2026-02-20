@@ -135,7 +135,34 @@ namespace Bonsai.Editor
 
         public static Tuple<string, string> GetName(XElement expr, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool isSubGraph = false)
         {
-            string? definedName = expr.Element(ns + "Name")?.Value;
+            string xsiType = "";
+
+            if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
+            if (string.IsNullOrEmpty(xsiType))
+            {
+                XElement combinator = expr.Element(ns + "Combinator");
+
+                if (combinator == null)
+                {
+                    xsiType = expr.Attribute(xsi + "type")?.Value;
+                }
+                else xsiType = combinator?.Attribute(xsi + "type")?.Value;
+            }
+
+            string idName = xsiType;
+            if (idName == null) idName = "Unknown";
+
+
+            if (!nodeTypeCounts.ContainsKey(idName))
+            {
+                nodeTypeCounts[idName] = 0;
+            }
+            else idName += nodeTypeCounts[idName];
+            nodeTypeCounts[xsiType ?? "Unknown"]++;
+
+
+
+            string? displayName = expr.Element(ns + "Name")?.Value;
 
             IEnumerable<XElement>? properties = expr.Elements(ns + "Property");
 
@@ -152,40 +179,23 @@ namespace Bonsai.Editor
                 if (currName == null) currName = property.Attribute("Name")?.Value;
                 if (currName == null) currName = property.Attributes().FirstOrDefault()?.Value;
 
-                if (currName != null) definedName += $"{currName}, ";
+                if (currName != null) displayName += $"{currName}, ";
             }
-            if (definedName != null) definedName = definedName.TrimEnd(',', ' ');
+            if (displayName != null) displayName = displayName.TrimEnd(',', ' ');
 
-            string xsiType = "";
 
-            if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
-            if (string.IsNullOrEmpty(xsiType))
+            if (displayName == null)
             {
-                XElement combinator = expr.Element(ns + "Combinator");
-
-                if (combinator == null)
-                {
-                    xsiType = expr.Attribute(xsi + "type")?.Value;
-                }
-                else xsiType = combinator?.Attribute(xsi + "type")?.Value;
+                if (isSubGraph) displayName += "Subgraph";
+                displayName = xsiType.Split(':')[1];
             }
 
-            string name = string.Empty;
-            if (isSubGraph) name += "Subgraph ";
-            name += xsiType?.Split(':').Last();
-            if (name == null) name = "Unknown";
 
-            string idName = name;
-
-            if (!nodeTypeCounts.ContainsKey(name))
-            {
-                nodeTypeCounts[name] = 0;
-            }
-            else idName += nodeTypeCounts[name];
-            nodeTypeCounts[name]++;
+            
 
 
-            return new Tuple<string, string>(idName, definedName == null ? name : definedName);
+
+            return new Tuple<string, string>(idName, displayName);
         }
 
         public static List<string> GetInfo(XDocument doc, XElement expr, XNamespace ns, XNamespace xsi)
@@ -405,9 +415,9 @@ namespace Bonsai.Editor
             element.Add(nodes);
             element.Add(edges);
 
-            Regex nodeRgx = new Regex(@"(\w+)\(([^)]+)\):::(\w+)");
-            Regex edgeRgx = new Regex(@"(\w+)\s*-->\s*(\w+)");
-            Regex subStartRgx = new Regex(@"subgraph\s+(\w+)\[?([^\]]*)\]?");
+            Regex nodeRgx = new Regex(@"([^()]+)\(([^)]+)\):::(\w+)");
+            Regex edgeRgx = new Regex(@"([^\s]+)\s+-->\s*([^\s]+)");
+            Regex subStartRgx = new Regex(@"subgraph\s+([^\s\[]+)\[?([^\]]*)\]?");
             Regex subEndRgx = new Regex(@"^\s*end\s*$");
 
             Dictionary<int, int> targetEdgeCounts = new Dictionary<int, int>();
@@ -561,6 +571,8 @@ namespace Bonsai.Editor
 
         public static Type GetBonsaiType(string name)
         {
+            name = name.Split(':').Last();
+
             foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
@@ -572,7 +584,6 @@ namespace Bonsai.Editor
                 Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
                 if (type != null) return type;
             }
-            Console.WriteLine(name);
 
             return typeof(ExternalizedMapping); //assumes name without type is externalizedmapping
         }
