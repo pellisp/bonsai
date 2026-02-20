@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Bonsai.Expressions;
-using System.Reactive.Linq;
-using System.IO;
 
 namespace Bonsai.Editor
 {
@@ -15,7 +16,7 @@ namespace Bonsai.Editor
         //xml -> mermaid
         public static Type GetNodeType(XElement element, XDocument doc, XNamespace ns, XNamespace xsi)
         {
-            XElement combinator = element.Element(ns + "Combinator");
+            XElement combinator = element.Element(ns + "Combinator");  //if combinator then get inner type
             string typeName = combinator?.Attribute(xsi + "type")?.Value;
 
             if (typeName == null)
@@ -29,14 +30,14 @@ namespace Bonsai.Editor
                 return null;
             }
 
-            string typeNamespaceAlias = null;
+            string namespacePrefix = null;
             string className = null;
 
-            string[] parts = typeName.Split(':');
+            string[] parts = typeName.Split(':'); //split name into namespace alias and class name
 
             if (parts.Length == 2)
             {
-                typeNamespaceAlias = parts[0];
+                namespacePrefix = parts[0];
                 className = parts[1];
             }
             else if (parts.Length == 1)
@@ -53,22 +54,21 @@ namespace Bonsai.Editor
             string clrNs = null;
             string assemblyName = null;
 
-            if (typeNamespaceAlias != null)
+            if (namespacePrefix != null)
             {
                 Dictionary<string, string> xmlns = doc.Root.Attributes()
                     .Where((XAttribute a) => a.IsNamespaceDeclaration && a.Name.Namespace == XNamespace.Xmlns)
-                    .ToDictionary(
-                        (XAttribute a) => a.Name.LocalName,
-                        (XAttribute a) => a.Value
-                    );
+                    .ToDictionary((XAttribute a) => a.Name.LocalName, (XAttribute a) => a.Value); //get all namespace declarations
 
-                if (!xmlns.TryGetValue(typeNamespaceAlias, out string clrNamespace))
+                if (!xmlns.TryGetValue(namespacePrefix, out string clrNamespace))
                 {
-                    Console.WriteLine($"{element} wrong typenamespacealias");
+                    Console.WriteLine($"{element} wrong type namespace alias");
                     return null;
                 }
 
-                string[] clrParts = clrNamespace.Replace("clr-namespace:", "").Split(';');
+                Console.WriteLine(clrNamespace);
+
+                string[] clrParts = clrNamespace.Replace("clr-namespace:", "").Split(';'); //get namespace and assembly
                 if (clrParts.Length != 2)
                 {
                     Console.WriteLine($"{element} invalid clr namespace format ");
@@ -80,24 +80,21 @@ namespace Bonsai.Editor
             }
             else
             {
-                clrNs = "Bonsai.Expressions";
+                clrNs = "Bonsai.Expressions"; //default to base namespace and assembly
                 assemblyName = "Bonsai.Core";
             }
 
 
-            Assembly asm;
-            try
+            Assembly asm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase)); //try load assembly
+
+            if (asm == null)
             {
-                asm = Assembly.Load(assemblyName);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"{element} couldnt load assembly  '{assemblyName}': {ex.Message}");
+                Console.WriteLine($"{element} couldn't find loaded assembly '{assemblyName}'");
                 return null;
             }
 
-            Type type = asm.GetType($"{clrNs}.{className}");
-            if (type == null)
+            Type type = asm.GetType($"{clrNs}.{className}"); //get type from namespace and name
+            if (type == null) //get builder type if no normal type
             {
                 className += "Builder";
 
@@ -115,19 +112,19 @@ namespace Bonsai.Editor
         {
             while (type != null)
             {
-                WorkflowElementCategoryAttribute attr = type.GetCustomAttribute<WorkflowElementCategoryAttribute>();
+                WorkflowElementCategoryAttribute attr = type.GetCustomAttribute<WorkflowElementCategoryAttribute>(); //try get category attribute
                 if (attr != null)
                 {
                     string category = attr.Category.ToString();
                     return category;
                 }
 
-                if (type.GetCustomAttribute<CombinatorAttribute>() != null)
+                if (type.GetCustomAttribute<CombinatorAttribute>() != null) //check if combinator
                 {
                     return "Combinator";
                 }
 
-                type = type.BaseType;
+                type = type.BaseType; //search for inner category attribute in case of combinator or builder types
             }
 
             return "Unknown";
@@ -137,7 +134,7 @@ namespace Bonsai.Editor
         {
             string xsiType = "";
 
-            if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value;
+            if (isSubGraph) xsiType = expr.Element(ns + "Name")?.Value; //get xsi type
             if (string.IsNullOrEmpty(xsiType))
             {
                 XElement combinator = expr.Element(ns + "Combinator");
@@ -146,33 +143,33 @@ namespace Bonsai.Editor
                 {
                     xsiType = expr.Attribute(xsi + "type")?.Value;
                 }
-                else xsiType = combinator?.Attribute(xsi + "type")?.Value;
+                else xsiType = combinator?.Attribute(xsi + "type")?.Value; //if combinator get inner type
             }
 
-            string idName = xsiType;
+            string idName = xsiType; //idname = behind the scenes name used for edges (has to be unique)
             if (idName == null) idName = "Unknown";
 
 
-            if (!nodeTypeCounts.ContainsKey(idName))
+            if (!nodeTypeCounts.ContainsKey(idName))  //mamage node type counter to ensure unique id names
             {
                 nodeTypeCounts[idName] = 0;
             }
             else idName += nodeTypeCounts[idName];
-            nodeTypeCounts[xsiType ?? "Unknown"]++;
+            nodeTypeCounts[xsiType ?? "Unknown"]++; 
 
 
 
-            string? displayName = expr.Element(ns + "Name")?.Value;
+            string? displayName = expr.Element(ns + "Name")?.Value; //display name = name shown on graph
 
             IEnumerable<XElement>? properties = expr.Elements(ns + "Property");
 
-            string typeVal = expr.Attribute(xsi + "type")?.Value;
+            string typeVal = expr.Attribute(xsi + "type")?.Value; //get name from propertymappings if propertymapping or inputmapping
             if (typeVal == "PropertyMapping" || typeVal == "InputMapping")
             {
                 properties = expr.Element(ns + "PropertyMappings")?.Elements(ns + "Property");
             }
 
-            foreach (XElement property in properties)
+            foreach (XElement property in properties) //search for any name attribute in properties
             {
                 string? currName = null;
                 if (currName == null) currName = property.Attribute("DisplayName")?.Value;
@@ -190,22 +187,17 @@ namespace Bonsai.Editor
                 displayName = xsiType.Split(':')[1];
             }
 
-
-            
-
-
-
             return new Tuple<string, string>(idName, displayName);
         }
 
         public static List<string> GetInfo(XDocument doc, XElement expr, XNamespace ns, XNamespace xsi)
         {
-            List<string> elements = new List<string>();
+            List<string> elements = new List<string>(); //extract info from properties to display as comments in mermaid
 
             string type = expr.Attribute(xsi + "type")?.Value;
             if (type == "Combinator")
             {
-                expr = expr.Element(ns + "Combinator");
+                expr = expr.Element(ns + "Combinator"); //get inner element form combinator
                 type = expr.Attribute(xsi + "type")?.Value;
             }
 
@@ -213,13 +205,12 @@ namespace Bonsai.Editor
             {
                 if (e.Name != ns + "Workflow")
                 {
-                    elements.Add(e.ToString());
+                    elements.Add(e.ToString()); //get all non workflow properties
                 }
             }
 
             return elements;
         }
-
 
         public static List<string> GetMermaid(XElement parentWorkflow, XDocument doc, XNamespace ns, XNamespace xsi, Dictionary<string, int> nodeTypeCounts, bool displaySubgraphs)
         {
@@ -244,17 +235,17 @@ namespace Bonsai.Editor
                 XElement expr = nodes.ElementAt(i);
 
                 Type exprType = GetNodeType(expr, doc, ns, xsi);
-                string category = GetCategory(exprType);
+                string category = GetCategory(exprType); //get category to determine node color
 
-                Tuple<string, string> nameTuple = GetName(expr, ns, xsi, nodeTypeCounts);
+                Tuple<string, string> nameTuple = GetName(expr, ns, xsi, nodeTypeCounts); //get id and displayname
 
                 res.Add($"{nameTuple.Item1}({nameTuple.Item2}):::{category}");
 
-                nodeNames[i] = nameTuple.Item1;
+                nodeNames[i] = nameTuple.Item1; //track id names for edges
 
                 List<string> info = GetInfo(doc, expr, ns, xsi);
 
-                foreach (string s in info)
+                foreach (string s in info) //store any info as comments
                 {
                     string[] lines = s.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                     foreach (string line in lines.Where(line => line != "")) res.Add($"%%c {line}");
@@ -262,11 +253,11 @@ namespace Bonsai.Editor
                 }
 
                 var workflow = expr.Element(ns + "Workflow");
-                if (workflow != null)
+                if (workflow != null) //store workflow as subgraph
                 {
                     Tuple<string, string> name = GetName(expr, ns, xsi, nodeTypeCounts, true);
 
-                    List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts, displaySubgraphs);
+                    List<string> subGraph = GetMermaid(expr, doc, ns, xsi, nodeTypeCounts, displaySubgraphs); //recursively get subgraph mermaid representation
                     if (displaySubgraphs)
                     {
                         res.Add($"subgraph {name.Item1}[{name.Item2}]");
@@ -277,7 +268,7 @@ namespace Bonsai.Editor
                     {
                         res.Add($"%% subgraph {name.Item1}[{name.Item2}]");
 
-                        foreach (string s in subGraph)
+                        foreach (string s in subGraph) //if not displaying subgraphs add subgraph info as comments
                         {
                             if (!s.StartsWith("%%")) res.Add($"%%  {s}");
                             else res.Add(s);
@@ -286,7 +277,7 @@ namespace Bonsai.Editor
                         res.Add("%% end");
                     }
 
-                    string? target = subGraph.FirstOrDefault();
+                    string? target = subGraph.FirstOrDefault(); //draw arrow from subgraph to first node in subgraph (ideally should be from node creating subgraph to whole subgraph but not supported by mermaid)
                     if (!string.IsNullOrEmpty(target))
                     {
                         int index = target.IndexOf('(');
@@ -299,7 +290,7 @@ namespace Bonsai.Editor
 
             }
 
-            List<Tuple<int, int>> edges = edgeExpressions
+            List<Tuple<int, int>> edges = edgeExpressions //get list of edges
                 .Select(e => new Tuple<int, int>(
                     Convert.ToInt32(e.Attribute("From")?.Value),
                     Convert.ToInt32(e.Attribute("To")?.Value)
@@ -307,7 +298,7 @@ namespace Bonsai.Editor
                 .Where(e => nodeNames.ContainsKey(e.Item1) && nodeNames.ContainsKey(e.Item2))
                 .ToList();
 
-            foreach (Tuple<int, int> edge in edges)
+            foreach (Tuple<int, int> edge in edges) //add edges to mermaid
             {
                 string from = nodeNames[edge.Item1];
                 string to = nodeNames[edge.Item2];
@@ -326,16 +317,15 @@ namespace Bonsai.Editor
 
             List<string> mermaidLines = new List<string>();
 
-            mermaidLines.Add($"%% displaySubgraphs: {displaySubgraphs}");
+            mermaidLines.Add($"%% displaySubgraphs: {displaySubgraphs}"); //info about whether subgraphs are displayed or not to ensure correct parsing back to xml
 
-            foreach (XAttribute attr in doc.Root.Attributes())
+            foreach (XAttribute attr in doc.Root.Attributes()) //namespaces
             {
                 mermaidLines.Add($"%% {attr.ToString()}");
-
             }
             mermaidLines.Add("graph LR");
-
-            mermaidLines.Add("classDef Source fill:#c8f7c5,stroke:#2d862d,stroke-width:2px;");
+             
+            mermaidLines.Add("classDef Source fill:#c8f7c5,stroke:#2d862d,stroke-width:2px;"); //define appearances of each category
             mermaidLines.Add("classDef Transform fill:#cce5ff,stroke:#0059b3,stroke-width:2px;");
             mermaidLines.Add("classDef Sink fill:#e6ccff,stroke:#663399,stroke-width:2px;");
             mermaidLines.Add("classDef Combinator fill:#fff3cd,stroke:#b38f00,stroke-width:2px;");
@@ -355,7 +345,7 @@ namespace Bonsai.Editor
         {
             XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
-            List<XAttribute> attributes = ParseAttributes(mermaidLines);
+            List<XAttribute> attributes = ParseAttributes(mermaidLines); //get namespace attributes
 
             XAttribute nsAttr = attributes.FirstOrDefault(a => a.Name == "xmlns");
             XNamespace ns = nsAttr != null ? nsAttr.Value : "http://bonsai-project.io/WorkflowBuilder";
@@ -364,11 +354,11 @@ namespace Bonsai.Editor
             new XDeclaration("1.0", "utf-8", null),
             new XElement(ns + "WorkflowBuilder"));
 
-            foreach (XAttribute a in attributes) doc.Root.Add(a);
+            foreach (XAttribute a in attributes) doc.Root.Add(a); //add namespace attributes to root
 
             bool displaySubgraphs = mermaidLines[0].Split(' ')[2] == "True" ? true : false;
 
-            doc.Root.Add(GetXml(mermaidLines, ns, xsi, new Dictionary<string, int>(), attributes, displaySubgraphs));
+            doc.Root.Add(GetXml(doc, mermaidLines, ns, xsi, new Dictionary<string, int>(), attributes, displaySubgraphs)); //add workflow elements
 
             return doc;
         }
@@ -376,7 +366,7 @@ namespace Bonsai.Editor
         public static List<XAttribute> ParseAttributes(List<string> lines)
         {
             List<XAttribute> attrs = new List<XAttribute>();
-            Regex regex = new Regex(@"^%%\s*(?<name>[^\s=]+)\s*=\s*""(?<value>[^""]*)""");
+            Regex regex = new Regex(@"^%%\s*(?<name>[^\s=]+)\s*=\s*""(?<value>[^""]*)"""); //regex for namespace attribute
 
             foreach (string line in lines)
             {
@@ -405,9 +395,9 @@ namespace Bonsai.Editor
             return attrs;
         }
 
-        public static XElement GetXml(List<string> mermaidLines, XNamespace ns, XNamespace xsi, Dictionary<string, int> indexMap, List<XAttribute> attributes, bool displaySubgraphs, int nodeCount = 0, int recursionOffset = 0)
+        public static XElement GetXml(XDocument doc, List<string> mermaidLines, XNamespace ns, XNamespace xsi, Dictionary<string, int> indexMap, List<XAttribute> attributes, bool displaySubgraphs, int nodeCount = 0, int recursionOffset = 0)
         {
-            recursionOffset = nodeCount;
+            recursionOffset = nodeCount; //track number of nodes in parent graphs to correctly index edges in subgraphs
             XElement element = new XElement(ns + "Workflow");
             XElement nodes = new XElement(ns + "Nodes");
             XElement edges = new XElement(ns + "Edges");
@@ -415,17 +405,17 @@ namespace Bonsai.Editor
             element.Add(nodes);
             element.Add(edges);
 
-            Regex nodeRgx = new Regex(@"([^()]+)\(([^)]+)\):::(\w+)");
-            Regex edgeRgx = new Regex(@"([^\s]+)\s+-->\s*([^\s]+)");
-            Regex subStartRgx = new Regex(@"subgraph\s+([^\s\[]+)\[?([^\]]*)\]?");
-            Regex subEndRgx = new Regex(@"^\s*end\s*$");
+            Regex nodeRgx = new Regex(@"([^()]+)\(([^)]+)\):::(\w+)"); //regex for node definition
+            Regex edgeRgx = new Regex(@"([^\s]+)\s+-->\s*([^\s]+)"); //regex for edge definition
+            Regex subStartRgx = new Regex(@"subgraph\s+([^\s\[]+)\[?([^\]]*)\]?"); //regex for subgraph start
+            Regex subEndRgx = new Regex(@"^\s*end\s*$"); //regex for subgraph end
 
             Dictionary<int, int> targetEdgeCounts = new Dictionary<int, int>();
             XElement subGraphElement = null;
 
             for (int i = 0; i < mermaidLines.Count; i++)
             {
-                if (mermaidLines[i].StartsWith("%%")) mermaidLines[i] = mermaidLines[i].Substring(2).Trim();
+                if (mermaidLines[i].StartsWith("%%")) mermaidLines[i] = mermaidLines[i].Substring(2).Trim(); //remove comments
             }
 
             for (int i = 0; i < mermaidLines.Count; i++)
@@ -443,15 +433,15 @@ namespace Bonsai.Editor
 
                     indexMap[id] = nodeCount;
 
-                    while (int.TryParse(id.Last().ToString(), out _))
+                    while (int.TryParse(id.Last().ToString(), out _)) //remove trailing numbers to get type name
                     {
                         id = id.Substring(0, id.Length - 1);
                     }
 
-                    Type nodeType = GetBonsaiType(id);
+                    Type nodeType = GetBonsaiType(id, doc);
                     bool isCombinator = IsCombinator(nodeType);
 
-                    string xsiName = GetXsiType(attributes, nodeType); //nodetype null
+                    string xsiName = GetXsiType(attributes, nodeType); 
 
                     if (xsiName.Contains("Builder"))
                     {
@@ -462,26 +452,26 @@ namespace Bonsai.Editor
                     bool subGraph = false;
 
                     string xmlText = "";
-                    while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("c"))
+                    while (i + 1 < mermaidLines.Count && mermaidLines[i + 1].StartsWith("c")) //get any properties of node
                     {
                         i++;
                         xmlText += mermaidLines[i].Substring(2).Trim();
                         xmlText += "\n";
 
-                        if (i + 1 < mermaidLines.Count) if (subStartRgx.Match(mermaidLines[i + 1]).Success)
-                        {
-                            subGraph = true;
-                            break;
-                        }
+                        if (i + 1 < mermaidLines.Count) if (subStartRgx.Match(mermaidLines[i + 1]).Success) //check if next line is start of subgraph
+                            {
+                                subGraph = true;
+                                break;
+                            }
                     }
                     if (xmlText != "")
                     {
-                        string containedStr = "<container>" + xmlText + "</container>";
+                        string containedStr = "<container>" + xmlText + "</container>"; //group properties under container element to parse as xml
                         contained = XElement.Parse(containedStr);
                     }
 
 
-                    XElement node = null;
+                    XElement node = null; //recreate element with correct type and properties, if combinator create inner element for type and put properties in it
                     if (isCombinator)
                     {
                         node = new XElement(ns + "Expression",
@@ -522,17 +512,17 @@ namespace Bonsai.Editor
                 {
                     Match match = edgeRgx.Match(line);
 
-                    int from = indexMap[match.Groups[1].Value] - recursionOffset;
+                    int from = indexMap[match.Groups[1].Value] - recursionOffset; //get nodes edge is coming from and going to, adjust if subgraph to account for nodes in parent graph
                     int to = indexMap[match.Groups[2].Value] - recursionOffset;
 
                     int pos = 1;
-                    if (targetEdgeCounts.ContainsKey(to))
+                    if (targetEdgeCounts.ContainsKey(to)) //check if other edges already going to node
                     {
                         pos = targetEdgeCounts[to] + 1;
                     }
                     else targetEdgeCounts[to] = 1;
 
-                    XElement edge = new XElement(ns + "Edge",
+                    XElement edge = new XElement(ns + "Edge", //create edge element and add source label
                         new XAttribute("From", from),
                         new XAttribute("To", to),
                         new XAttribute("Label", $"Source{pos}")
@@ -543,8 +533,8 @@ namespace Bonsai.Editor
                 if (subStartRgx.Match(line).Success)
                 {
                     i++;
-                    int nestingDepth = 1;
-                    List<string> subGraphLines = new List<string>();
+                    int nestingDepth = 1; //track number of subgraphs entered to know when current subgraph ends, as subgraphs can be nested
+                    List<string> subGraphLines = new List<string>(); //collect nodes of subgraph to parse as separate workflow
                     while (i < mermaidLines.Count)
                     {
                         string subLine = mermaidLines[i];
@@ -556,7 +546,7 @@ namespace Bonsai.Editor
                         subGraphLines.Add(mermaidLines[i]);
                         i++;
                     }
-                    XElement subworkflow = GetXml(subGraphLines, ns, xsi, indexMap, attributes, displaySubgraphs, nodeCount);
+                    XElement subworkflow = GetXml(doc, subGraphLines, ns, xsi, indexMap, attributes, displaySubgraphs, nodeCount); //recursively parse subgraph nodes
 
                     subGraphElement.Add(subworkflow);
 
@@ -569,23 +559,69 @@ namespace Bonsai.Editor
             return element;
         }
 
-        public static Type GetBonsaiType(string name)
+        public static Type GetBonsaiType(string name, XDocument doc)
         {
-            name = name.Split(':').Last();
+            string[] parts = name.Split(':');
 
-            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+            string className = "";
+            string namespacePrefix = "";
+
+            if (parts.Length == 2)
             {
-                Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
+                namespacePrefix = parts[0];  
+                className = parts[1];           
+            }
+            else
+            {
+                className = parts[0];
+            }
+
+            if (namespacePrefix != "")
+            {
+                // get all namespaces
+                Dictionary<string, string> xmlns = doc.Root.Attributes()
+                    .Where(a => a.IsNamespaceDeclaration && a.Name.Namespace == XNamespace.Xmlns)
+                    .ToDictionary(a => a.Name.LocalName, a => a.Value);
+
+                if (!xmlns.TryGetValue(namespacePrefix, out string clrNamespace)) //find specific namespace
+                {
+                    Console.WriteLine($"Wrong type namespace alias '{namespacePrefix}'");
+                    return null;
+                }
+
+                string[] clrParts = clrNamespace.Replace("clr-namespace:", "").Split(';'); //extract info from namespace name
+                if (clrParts.Length != 2)
+                {
+                    Console.WriteLine($"Invalid clr namespace format '{clrNamespace}'");
+                    return null;
+                }
+
+                string clrNs = clrParts[0];
+                string assemblyName = clrParts[1].Replace("assembly=", ""); 
+
+                Assembly asm = AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase)); //try load assembly and check if type contained in it
+
+                if (asm != null)
+                {
+                    Type type = asm.GetTypes().FirstOrDefault(t => t.Name == className && t.Namespace == clrNs);
+                    if (type != null) return type;
+                }
+            }
+
+            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies()) //if no given namespace prefix or namespace not found search through all namespaces
+            {
+                Type type = asm.GetTypes().FirstOrDefault(t => t.Name == className);
                 if (type != null) return type;
             }
-            name += "Builder";
+
+            className += "Builder";
             foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                Type type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
+                Type type = asm.GetTypes().FirstOrDefault(t => t.Name == className);
                 if (type != null) return type;
             }
 
-            return typeof(ExternalizedMapping); //assumes name without type is externalizedmapping
+            return typeof(ExternalizedMapping); //if no type found assume externalised property
         }
 
         public static bool IsCombinator(Type type)
@@ -597,7 +633,7 @@ namespace Bonsai.Editor
                     return true;
                 }
 
-                type = type.BaseType;
+                type = type.BaseType; //check if type or any of its base types is a combinator
             }
 
             return false;
@@ -616,12 +652,12 @@ namespace Bonsai.Editor
 
                     if (nsValue == clrNs)
                     {
-                        return $"{prefix}:{type.Name}";
+                        return $"{prefix}:{type.Name}"; //reconstruct xsi type using namespace prefix
                     }
                 }
             }
 
-            return type.Name;
+            return type.Name; //return name if no namespace prefix
         }
 
         public static void ExportMermaid(string exportFileName, string bonsaiFilePath)
