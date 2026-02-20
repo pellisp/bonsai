@@ -209,6 +209,13 @@ namespace Bonsai.Editor.GraphView
         private void StoreWorkflowElements(bool copyAsMermaid = false, bool displaySubgraphs = true)
         {
             var selection = selectionModel.SelectedNodes.SortSelection(Workflow);
+
+            if (copyAsMermaid)
+            {
+                string mmd = MermaidSerializer.Serialize(selection);
+                Console.WriteLine(mmd);
+            }
+
             var xmlText = ElementStore.StoreWorkflowElements(selection.ToWorkflow());
             string text = xmlText;
             if (copyAsMermaid)
