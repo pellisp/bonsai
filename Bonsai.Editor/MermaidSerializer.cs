@@ -12,7 +12,7 @@ namespace Bonsai.Editor.GraphModel
             if (nodes == null) throw new ArgumentNullException(nameof(nodes));
 
             var sb = new StringBuilder();
-            sb.AppendLine("flowchart TD");
+            sb.AppendLine("flowchart LR");
 
             SerializeNodes(nodes, sb, 0);
 
