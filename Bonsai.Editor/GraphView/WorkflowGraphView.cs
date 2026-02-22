@@ -205,19 +205,26 @@ namespace Bonsai.Editor.GraphView
             }
         }
 
-        private void StoreWorkflowElements()
+        //
+        private void StoreWorkflowElements(bool copyAsMermaid = false, bool displaySubgraphs = true)
         {
             var selection = selectionModel.SelectedNodes.SortSelection(Workflow);
             var xmlText = ElementStore.StoreWorkflowElements(selection.ToWorkflow());
-            XDocument doc = XDocument.Parse(xmlText);
-            List<string> mermaid = EditorForm.MermaidConverter.ParseToMermaid(doc);
-            string text = string.Join(System.Environment.NewLine, mermaid);
+            string text = xmlText;
+            if (copyAsMermaid)
+            {
+                XDocument doc = XDocument.Parse(xmlText);
+                List<string> mermaid = Bonsai.Editor.XmlToMermaidConverter.ParseToMermaid(doc, displaySubgraphs);
+                text = string.Join(System.Environment.NewLine, mermaid);
+            }
 
             if (!string.IsNullOrEmpty(text))
             {
                 Clipboard.SetText(text);
             }
         }
+
+        //
 
         private void ShowClipboardError(InvalidOperationException ex, string message)
         {
@@ -280,6 +287,7 @@ namespace Bonsai.Editor.GraphView
             EditorControl.UpdateWatchTool();
         }
 
+        //-------------------------------------------
         public void CutToClipboard()
         {
             try
@@ -308,12 +316,16 @@ namespace Bonsai.Editor.GraphView
             {
                 if (Clipboard.ContainsText())
                 {
-                    string mermaid = Clipboard.GetText();
-                    XDocument xml = EditorForm.MermaidConverter.ParseToBonsai(mermaid.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
-                    string xmlString = xml.ToString();
+                    string text = Clipboard.GetText();
+                    if (text[0] == '%')
+                    {
+                        XDocument xml = Bonsai.Editor.XmlToMermaidConverter.ParseToXml(text.Split(new string[] { "\r\n", "\r", "\n" }, StringSplitOptions.None).ToList());
+                        text = xml.ToString();
+                    }
+
 
                     var workflow = ElementStore.RetrieveWorkflowElements(
-                        xmlString,
+                        text,
                         out SemanticVersion version);
                     UpgradeHelper.TryUpgradeWorkflow(workflow, version, out workflow);
                     InsertWorkflow(workflow.ToInspectableGraph());
@@ -324,6 +336,33 @@ namespace Bonsai.Editor.GraphView
                 ShowClipboardError(ex, Resources.PasteFromClipboard_Error);
             }
         }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == (Keys.Control | Keys.M))
+            {
+                try { StoreWorkflowElements(true); }
+                catch (InvalidOperationException ex)
+                {
+                    ShowClipboardError(ex, Resources.CopyToClipboard_Error);
+                }   
+                return true; 
+            }
+
+            if (keyData == (Keys.Control | Keys.M | Keys.Shift))
+            {
+                try { StoreWorkflowElements(true, false); }
+                catch (InvalidOperationException ex)
+                {
+                    ShowClipboardError(ex, Resources.CopyToClipboard_Error);
+                }
+                return true;
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        //---------------------------------------
 
         public void CreateGraphNode(string name, string typeName, ElementCategory elementCategory, CreateGraphNodeType nodeType, bool branch, bool group)
         {
